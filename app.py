@@ -498,6 +498,115 @@ def controler_carac(df, pesees=None):
 
 
 # =====================================================================
+# INDICATEURS THEMATIQUES
+# =====================================================================
+def _txt(serie):
+    return serie.astype(str).str.strip().str.lower()
+
+
+def _est_oui(df, col):
+    if col not in df:
+        return None
+    return _txt(df[col]).isin(["oui", "1", "true", "yes"])
+
+
+def _contient(df, col, *motifs):
+    """Vrai si une reponse a choix multiples contient l'un des motifs."""
+    if col not in df:
+        return None
+    s = _txt(df[col])
+    m = pd.Series(False, index=df.index)
+    for mot in motifs:
+        m |= s.str.contains(mot, regex=False, na=False)
+    return m
+
+
+def _part(masque):
+    if masque is None or len(masque) == 0:
+        return None
+    return float(masque.mean() * 100)
+
+
+def _moyenne(df, col):
+    if col not in df:
+        return None
+    v = pd.to_numeric(df[col], errors="coerce")
+    return float(v.mean()) if v.notna().any() else None
+
+
+# libelle, unite, sens (True = plus c'est haut mieux c'est)
+INDICATEURS = [
+    ("Service de collecte", "Ménages desservis", "%", True),
+    ("Service de collecte", "Collecte assurée par la SONAGED", "%", True),
+    ("Service de collecte", "Collecte irrégulière", "%", False),
+    ("Service de collecte", "Distance au point de collecte", "m", False),
+    ("Service de collecte", "Ménages satisfaits", "%", True),
+    ("Pratiques d'élimination", "Brûlage des déchets", "%", False),
+    ("Pratiques d'élimination", "Enfouissement", "%", False),
+    ("Pratiques d'élimination", "Dépôt sauvage", "%", False),
+    ("Pratiques d'élimination", "Compostage ou alimentation du bétail", "%", True),
+    ("Tri et valorisation", "Tri déjà pratiqué à la source", "%", True),
+    ("Tri et valorisation", "Passage de récupérateurs informels", "%", True),
+    ("Tri et valorisation", "Connaissent le tri et le recyclage", "%", True),
+    ("Disposition", "Disposés à trier", "%", True),
+    ("Disposition", "Disposés à payer", "%", True),
+    ("Disposition", "Redevance déjà payée", "%", True),
+    ("Disposition", "Montant acceptable", "FCFA/mois", True),
+    ("Ménage", "Taille moyenne du ménage", "pers.", None),
+]
+
+
+def calcul_indicateurs(df):
+    """Renvoie un dictionnaire indicateur -> valeur pour un sous-ensemble."""
+    if df is None or df.empty:
+        return {}
+    v = {
+        "Ménages desservis": _part(_est_oui(df, "d1_service")),
+        "Collecte assurée par la SONAGED": _part(
+            _contient(df, "d2_operateur", "sonaged")),
+        "Collecte irrégulière": _part(_contient(df, "d4_frequence", "irregul", "irrégul")),
+        "Distance au point de collecte": _moyenne(df, "d6_distance"),
+        "Ménages satisfaits": _part(_contient(df, "d8_satisfaction", "tres", "très", "satisfait")
+                                    if "d8_satisfaction" in df else None),
+        "Brûlage des déchets": _part(_contient(df, "e1_pratiques", "brulage", "brûlage")),
+        "Enfouissement": _part(_contient(df, "e1_pratiques", "enfouissement")),
+        "Dépôt sauvage": _part(_contient(df, "e1_pratiques", "depot_sauvage", "dépôt sauvage")),
+        "Compostage ou alimentation du bétail": _part(
+            _contient(df, "e1_pratiques", "compostage", "betail", "bétail")),
+        "Tri déjà pratiqué à la source": _part(_est_oui(df, "e2_tri")),
+        "Passage de récupérateurs informels": _part(_est_oui(df, "e3_recuperateurs")),
+        "Connaissent le tri et le recyclage": _part(
+            _contient(df, "f1_connaissance", "bien", "un_peu", "un peu")),
+        "Disposés à trier": _part(_contient(df, "f2_tri", "oui", "sous_conditions",
+                                            "sous conditions")),
+        "Disposés à payer": _part(_est_oui(df, "f3_payer")),
+        "Redevance déjà payée": _part(_est_oui(df, "d7_redevance")),
+        "Montant acceptable": _moyenne(df, "f3_montant"),
+        "Taille moyenne du ménage": _moyenne(df, "a1_total"),
+    }
+    # "Ménages satisfaits" : eviter de compter "peu satisfait" et "pas satisfait"
+    if "d8_satisfaction" in df:
+        s = _txt(df["d8_satisfaction"])
+        v["Ménages satisfaits"] = _part(s.isin(["tres", "très satisfait", "satisfait"]))
+    return v
+
+
+def tableau_thematique(df, dimension):
+    """Indicateurs calcules par modalite de la dimension choisie."""
+    if df is None or df.empty or dimension not in df:
+        return pd.DataFrame()
+    lignes = []
+    for modalite, sous in df.groupby(dimension):
+        d = calcul_indicateurs(sous)
+        d = {"Groupe": modalite, "Ménages enquêtés": len(sous), **d}
+        lignes.append(d)
+    ens = calcul_indicateurs(df)
+    lignes.append({"Groupe": "Ensemble", "Ménages enquêtés": len(df), **ens})
+    cols = ["Groupe", "Ménages enquêtés"] + [n for _, n, _, _ in INDICATEURS]
+    return pd.DataFrame(lignes)[[c for c in cols if c in pd.DataFrame(lignes).columns]]
+
+
+# =====================================================================
 # INTERFACE
 # =====================================================================
 exiger_mot_de_passe()
@@ -606,7 +715,8 @@ c4.metric("Communes couvertes",
           f"{socio['commune'].nunique() if not socio.empty else 0} / {len(COMMUNES)}")
 st.divider()
 
-onglets = st.tabs(["Avancement", "Carte", "Qualité", "Composition", "Questionnaires"])
+onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
+                   "Composition", "Questionnaires"])
 
 # ---------------------------------------------------------------- AVANCEMENT
 with onglets[0]:
@@ -744,8 +854,93 @@ with onglets[1]:
         except Exception as e:
             st.error(f"Rendu de la carte impossible : {e}")
 
-# ---------------------------------------------------------------- QUALITE
+# ---------------------------------------------------------------- THEMATIQUE
 with onglets[2]:
+    if socio.empty:
+        st.info("Cette vue s'appuie sur les fiches ménage. Aucune n'est encore arrivée.")
+    else:
+        dims = {"Commune": "commune", "Région": "region", "Strate d'habitat": "strate"}
+        dispo = {k: v for k, v in dims.items() if v in socio.columns}
+        if not dispo:
+            st.warning("Les colonnes commune, région et strate sont absentes des fiches.")
+        else:
+            dim_label = st.radio("Comparer par", list(dispo), horizontal=True)
+            dim = dispo[dim_label]
+            tab = tableau_thematique(socio, dim)
+
+            ens = calcul_indicateurs(socio)
+            k = st.columns(4)
+            for i, (lib, unite) in enumerate([
+                    ("Ménages desservis", "%"), ("Brûlage des déchets", "%"),
+                    ("Tri déjà pratiqué à la source", "%"), ("Disposés à payer", "%")]):
+                val = ens.get(lib)
+                k[i].metric(lib, "n.d." if val is None else f"{val:.0f} {unite}")
+            st.caption(f"Ensemble des {len(socio)} fiches ménage reçues.")
+            st.divider()
+
+            familles = []
+            for fam, nom, unite, sens in INDICATEURS:
+                if fam not in familles:
+                    familles.append(fam)
+            choix_fam = st.multiselect("Thèmes", familles, default=familles)
+            noms = [n for f, n, u, s in INDICATEURS if f in choix_fam]
+
+            for fam in choix_fam:
+                st.subheader(fam)
+                sous = [(n, u, s) for f, n, u, s in INDICATEURS if f == fam]
+                for nom, unite, sens in sous:
+                    if nom not in tab.columns:
+                        continue
+                    serie = tab[tab["Groupe"] != "Ensemble"][["Groupe", nom]].dropna()
+                    if serie.empty:
+                        continue
+                    valeur_ens = ens.get(nom)
+                    g, d = st.columns([3, 1])
+                    with g:
+                        try:
+                            import plotly.express as px
+                            fig = px.bar(serie.sort_values(nom), x=nom, y="Groupe",
+                                         orientation="h", text=serie.sort_values(nom)[nom]
+                                         .map(lambda v: f"{v:,.0f}".replace(",", " ")))
+                            coul = VERT if sens is not False else "#B01B2E"
+                            fig.update_traces(marker_color=coul, textposition="outside",
+                                              cliponaxis=False)
+                            if valeur_ens is not None:
+                                fig.add_vline(x=valeur_ens, line_dash="dot",
+                                              line_color="#666",
+                                              annotation_text="ensemble")
+                            fig.update_layout(height=max(220, 34 * len(serie)),
+                                              margin=dict(l=0, r=50, t=26, b=0),
+                                              title=f"{nom} ({unite})",
+                                              xaxis_title="", yaxis_title="",
+                                              plot_bgcolor="rgba(0,0,0,0)")
+                            st.plotly_chart(fig, width="stretch")
+                        except Exception:
+                            st.write(f"**{nom}** ({unite})")
+                            st.bar_chart(serie.set_index("Groupe")[nom])
+                    with d:
+                        st.metric("Ensemble",
+                                  "n.d." if valeur_ens is None else f"{valeur_ens:,.0f}"
+                                  .replace(",", " "))
+                        ecart = serie[nom].max() - serie[nom].min()
+                        st.caption(f"Écart entre groupes : {ecart:,.0f} {unite}"
+                                   .replace(",", " "))
+
+            st.divider()
+            st.subheader("Tableau complet")
+            st.dataframe(tab.round(1), hide_index=True, width="stretch")
+            st.download_button("Télécharger les indicateurs",
+                               tab.to_csv(index=False).encode("utf-8"),
+                               f"indicateurs_{dim}.csv", "text/csv")
+            st.caption(
+                "Les pourcentages portent sur les fiches où la question a été posée. "
+                "Un indicateur reste vide tant que la question correspondante n'a reçu "
+                "aucune réponse exploitable."
+            )
+
+
+# ---------------------------------------------------------------- QUALITE
+with onglets[3]:
     if socio.empty and carac.empty:
         st.info("Aucune soumission chargée. Choisir une source dans la barre latérale.")
     else:
@@ -792,7 +987,7 @@ with onglets[2]:
                                "anomalies_modecom.csv", "text/csv")
 
 # ---------------------------------------------------------------- COMPOSITION
-with onglets[3]:
+with onglets[4]:
     if carac.empty or pesees is None:
         st.info("Cette vue demande les soumissions de caractérisation et le questionnaire "
                 "correspondant.")
@@ -841,7 +1036,7 @@ with onglets[3]:
                                "composition_modecom.csv", "text/csv")
 
 # ---------------------------------------------------------------- QUESTIONNAIRES
-with onglets[4]:
+with onglets[5]:
     if f_socio is None and f_carac is None:
         st.info("Les deux questionnaires XLSForm ne sont pas dans le dépôt.")
     else:
