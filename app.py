@@ -576,8 +576,8 @@ if token:
         socio_brut, carac_brut, derniere = recuperer_kobo(url, token, uid1, uid2)
     except Exception as e:
         st.sidebar.error(f"Échec de la récupération : {e}")
-        st.sidebar.caption("Vérifier le jeton. Si vos formulaires sont sur le serveur "
-                           "européen, l'adresse est https://eu.kobotoolbox.org")
+        st.sidebar.caption("Vérifier le jeton d'API et les deux identifiants de "
+                           "formulaire dans les secrets.")
 
 if derniere is not None:
     age = int((pd.Timestamp.now() - derniere).total_seconds())
@@ -588,10 +588,6 @@ if derniere is not None:
                        + (f", il y a {age // 60} min" if age >= 60 else ", à l'instant"))
     st.sidebar.caption(f"Relecture de Kobo toutes les {DUREE_CACHE // 60} minutes, "
                        "à la première interaction avec la page.")
-    if n1 == 0 and n2 == 0:
-        st.sidebar.warning("La connexion fonctionne mais les deux formulaires sont "
-                           "vides. Vérifier que les fiches ont bien été envoyées "
-                           "depuis KoboCollect, et non laissées en brouillon.")
 
 socio = normalise_socio(socio_brut)
 carac = normalise_carac(carac_brut)
