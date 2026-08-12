@@ -144,78 +144,84 @@ def _diagnostic_secrets():
 
 
 VERT_CLAIR = "#8DC63F"
-SABLE = "#F7F7F4"
-GRIS = "#6b6b66"
+FOND = "#10151A"        # fond general
+SURFACE = "#19212A"     # cartes et panneaux
+BORDURE = "#2C3742"
+TEXTE = "#E9ECE8"
+TEXTE_DOUX = "#9BA6A0"
+SABLE = SURFACE
+GRIS = TEXTE_DOUX
 
 CSS = """
 <style>
   #MainMenu, footer {visibility:hidden;}
   .block-container {padding-top:1.4rem; padding-bottom:2rem; max-width:1500px;}
 
-  .entete {background:linear-gradient(100deg,#14472A 0%,#1B5E36 45%,#2E7D4B 100%);
-           color:#fff; padding:18px 24px; border-radius:10px; margin-bottom:20px;
-           box-shadow:0 2px 10px rgba(20,71,42,.18);}
-  .entete h1 {margin:0; font-size:27px; font-weight:700; letter-spacing:-.2px;}
-  .entete p  {margin:6px 0 0 0; font-size:14px; opacity:.88; max-width:900px;}
-
-  .fiche {background:#fff; border:1px solid #e6e6df; border-left:4px solid #1B5E36;
-          border-radius:8px; padding:12px 16px; height:100%;}
-  .fiche .lib  {font-size:12.5px; color:#6b6b66; text-transform:uppercase;
-                letter-spacing:.4px; margin:0 0 6px 0; line-height:1.25;}
-  .fiche .val  {font-size:27px; font-weight:700; color:#1a1a1a; line-height:1;}
-  .fiche .note {font-size:12px; color:#6b6b66; margin-top:5px;}
-  .fiche.alerte {border-left-color:#B01B2E;}
-  .fiche.veille {border-left-color:#F4A93B;}
-  .fiche.neutre {border-left-color:#c9c9c1;}
-
-  .rubrique {font-size:17px; font-weight:700; color:#1B5E36; margin:22px 0 2px 0;}
-  .rubrique + hr {margin:6px 0 14px 0; border:none; border-top:2px solid #e2e8e3;}
-
-  .stTabs [data-baseweb="tab-list"] {gap:2px; border-bottom:1px solid #e6e6df;}
-  .stTabs [data-baseweb="tab"] {padding:9px 18px; font-size:14.5px; font-weight:600;
-                               color:#6b6b66; background:transparent;}
-  .stTabs [aria-selected="true"] {color:#1B5E36 !important;
-                                  border-bottom:3px solid #1B5E36 !important;}
-
-  /* l'application reste en clair, meme si le navigateur est en mode sombre */
   .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"]
-      {background:#ffffff; color:#1a1a1a;}
+      {background:#10151A; color:#E9ECE8;}
   .stApp p, .stApp li, .stApp label, .stApp span, .stApp h1, .stApp h2, .stApp h3,
-  .stApp h4, .stApp h5, .stApp h6 {color:#1a1a1a;}
+  .stApp h4, .stApp h5, .stApp h6, .stApp strong {color:#E9ECE8;}
   [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p
-      {color:#5f5f5a !important;}
+      {color:#9BA6A0 !important;}
 
-  section[data-testid="stSidebar"] {background:#EDF2EE; border-right:1px solid #d5ded7;}
+  .entete {background:linear-gradient(100deg,#0E3D24 0%,#17663A 55%,#1F8A4C 100%);
+           color:#fff; padding:18px 24px; border-radius:10px; margin-bottom:20px;
+           border:1px solid #2B6B45;}
+  .entete h1 {margin:0; font-size:27px; font-weight:700; letter-spacing:-.2px; color:#fff;}
+  .entete p  {margin:6px 0 0 0; font-size:14px; color:#D6E7DC; max-width:900px;}
+
+  .fiche {background:#19212A; border:1px solid #2C3742; border-left:4px solid #35C46F;
+          border-radius:8px; padding:12px 16px; height:100%;}
+  .fiche .lib  {font-size:12.5px; color:#9BA6A0; text-transform:uppercase;
+                letter-spacing:.4px; margin:0 0 6px 0; line-height:1.25;}
+  .fiche .val  {font-size:27px; font-weight:700; color:#F2F5F1; line-height:1;}
+  .fiche .note {font-size:12px; color:#8D978F; margin-top:5px;}
+  .fiche.alerte {border-left-color:#E4576B;}
+  .fiche.veille {border-left-color:#F4A93B;}
+  .fiche.neutre {border-left-color:#4A5763;}
+
+  .rubrique {font-size:17px; font-weight:700; color:#7ED694; margin:22px 0 2px 0;}
+  .rubrique + hr {margin:6px 0 14px 0; border:none; border-top:1px solid #2C3742;}
+
+  .stTabs [data-baseweb="tab-list"] {gap:2px; border-bottom:1px solid #2C3742;}
+  .stTabs [data-baseweb="tab"] {padding:9px 18px; font-size:14.5px; font-weight:600;
+                               color:#9BA6A0; background:transparent;}
+  .stTabs [aria-selected="true"] {color:#7ED694 !important;
+                                  border-bottom:3px solid #35C46F !important;}
+  .stTabs [data-baseweb="tab"] p {color:inherit !important;}
+
+  section[data-testid="stSidebar"] {background:#141B22; border-right:1px solid #2C3742;}
   section[data-testid="stSidebar"] img {margin-bottom:6px; border-radius:4px;}
-  /* lisibilite de la barre laterale : texte force en fonce */
   section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
   section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] p,
   section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] li,
   section[data-testid="stSidebar"] .stMarkdown,
   section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p
-      {color:#14472A !important;}
+      {color:#E9ECE8 !important;}
   section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
   section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p
-      {color:#4a5a4f !important;}
+      {color:#9BA6A0 !important;}
   section[data-testid="stSidebar"] h2 {font-size:16px; font-weight:700;
-      letter-spacing:.3px; text-transform:uppercase;}
-  /* champs de saisie de la barre laterale */
+      letter-spacing:.3px; text-transform:uppercase; color:#7ED694 !important;}
   section[data-testid="stSidebar"] input, section[data-testid="stSidebar"] textarea
-      {background:#fff !important; color:#1a1a1a !important;
-       border:1px solid #c9d5cd !important;}
-  /* bouton principal de la barre laterale */
+      {background:#0D1217 !important; color:#E9ECE8 !important;
+       border:1px solid #2C3742 !important;}
   section[data-testid="stSidebar"] .stButton button
-      {background:#1B5E36; color:#fff !important; border:none; font-weight:600;}
-  section[data-testid="stSidebar"] .stButton button:hover {background:#14472A;}
+      {background:#1F8A4C; color:#fff !important; border:none; font-weight:600;}
+  section[data-testid="stSidebar"] .stButton button:hover {background:#166B3A;}
   section[data-testid="stSidebar"] .stButton button p {color:#fff !important;}
-  /* encadres d'etat, garder un fond clair et un texte lisible */
-  section[data-testid="stSidebar"] [data-testid="stAlert"] {color:#1a1a1a;}
-  section[data-testid="stSidebar"] [data-testid="stAlert"] p {color:#1a1a1a !important;}
 
-  div[data-testid="stMetricValue"] {font-size:25px; font-weight:700;}
-  div[data-testid="stMetricLabel"] {color:#6b6b66;}
-  .stDataFrame {border:1px solid #e6e6df; border-radius:8px;}
-  .pied {color:#8a8a84; font-size:12px; border-top:1px solid #e6e6df;
+  [data-testid="stAlert"] {background:#19212A; border:1px solid #2C3742;
+                           border-radius:8px;}
+  [data-testid="stAlert"] p {color:#E9ECE8 !important;}
+
+  div[data-testid="stMetricValue"] {font-size:25px; font-weight:700; color:#F2F5F1;}
+  div[data-testid="stMetricLabel"] {color:#9BA6A0;}
+  .stDataFrame {border:1px solid #2C3742; border-radius:8px;}
+  .stDownloadButton button {background:#19212A; color:#E9ECE8 !important;
+                            border:1px solid #2C3742;}
+  .stDownloadButton button:hover {border-color:#35C46F; color:#7ED694 !important;}
+  .pied {color:#7E8A83; font-size:12px; border-top:1px solid #2C3742;
          margin-top:26px; padding-top:12px;}
 </style>
 """
@@ -244,12 +250,13 @@ def rubrique(texte):
 def habiller(fig, hauteur=None):
     """Mise en forme commune des graphiques Plotly."""
     fig.update_layout(
-        font=dict(family="Source Sans Pro, Segoe UI, sans-serif", size=13, color="#1a1a1a"),
+        font=dict(family="Source Sans Pro, Segoe UI, sans-serif", size=13, color="#E9ECE8"),
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=0, r=40, t=28, b=0),
-        xaxis=dict(gridcolor="#ecece6", zeroline=False),
-        yaxis=dict(gridcolor="#ecece6", zeroline=False),
-        title_font=dict(size=14, color="#1B5E36"),
+        xaxis=dict(gridcolor="#2C3742", zeroline=False, linecolor="#2C3742"),
+        yaxis=dict(gridcolor="#2C3742", zeroline=False, linecolor="#2C3742"),
+        legend=dict(font=dict(color="#E9ECE8")),
+        title_font=dict(size=14, color="#7ED694"),
     )
     if hauteur:
         fig.update_layout(height=hauteur)
@@ -258,8 +265,9 @@ def habiller(fig, hauteur=None):
 
 def attente(message):
     st.markdown(
-        f"<div style='background:{SABLE};border:1px dashed #d6d6ce;border-radius:10px;"
-        f"padding:34px 24px;text-align:center;color:{GRIS};margin-top:8px'>"
+        f"<div style='background:{SURFACE};border:1px dashed {BORDURE};"
+        f"border-radius:10px;padding:34px 24px;text-align:center;color:{TEXTE_DOUX};"
+        "margin-top:8px'>"
         f"<div style='font-size:30px;margin-bottom:8px'>⏳</div>{message}</div>",
         unsafe_allow_html=True)
 
@@ -926,14 +934,15 @@ with onglets[1]:
                                 ["Avancement", "Méthode", "Population 2023"], horizontal=True)
             com = communes_geo.to_crs(3857)
             fig, ax = plt.subplots(figsize=(13, 7.2), dpi=140)
-            ax.set_facecolor("#F7F7F4")
+            fig.patch.set_facecolor(FOND)
+            ax.set_facecolor("#151C24")
             if variable == "Méthode":
                 for m, coul in COULEURS.items():
                     s = com[com["methode"] == m]
                     if len(s):
-                        s.plot(ax=ax, facecolor=coul, edgecolor="white", lw=1.0)
+                        s.plot(ax=ax, facecolor=coul, edgecolor="#10151A", lw=1.0)
             elif variable == "Population 2023":
-                com.plot(ax=ax, column="pop_2023", cmap="YlGn", edgecolor="white", lw=0.8,
+                com.plot(ax=ax, column="pop_2023", cmap="YlGn", edgecolor="#10151A", lw=0.8,
                          legend=True, legend_kwds={"label": "Habitants (RGPH-5, 2023)",
                                                    "shrink": 0.6})
             else:
@@ -941,27 +950,38 @@ with onglets[1]:
                 av["avancement"] = av["avancement"].fillna(-1)
                 hors, dans = av[av["avancement"] < 0], av[av["avancement"] >= 0]
                 if len(hors):
-                    hors.plot(ax=ax, facecolor="#E4E4DC", edgecolor="white", lw=0.8, hatch="///")
+                    hors.plot(ax=ax, facecolor="#242E38", edgecolor="#3A4650", lw=0.8,
+                              hatch="///")
                 if len(dans):
                     dans.plot(ax=ax, column="avancement", cmap="RdYlGn", vmin=0, vmax=100,
-                              edgecolor="white", lw=0.8, legend=True,
+                              edgecolor="#10151A", lw=0.8, legend=True,
                               legend_kwds={"label": "Avancement (%)", "shrink": 0.6})
             if sites is not None:
                 for _, r in sites.to_crs(3857).iterrows():
                     est_source = str(r["methode"]).startswith("MODECOM")
                     ax.plot(r.geometry.x, r.geometry.y, marker="*" if est_source else "o",
                             ms=18 if est_source else 9,
-                            mfc=COULEURS.get(r["methode"], "#888"), mec=ENCRE, mew=1.0, zorder=6)
+                            mfc=COULEURS.get(r["methode"], "#888"), mec="#F2F5F1",
+                            mew=1.0, zorder=6)
             for _, r in com.iterrows():
                 pt = r.geometry.representative_point()
                 etiq = r["commune"]
                 if variable == "Avancement" and r["cible"]:
                     etiq += f"\n{r['recus']}/{r['cible']}"
                 ax.annotate(etiq, (pt.x, pt.y), ha="center", va="center", fontsize=7.5,
-                            fontweight="bold", color=ENCRE, zorder=8,
-                            path_effects=[pe.withStroke(linewidth=2.6, foreground="white")])
+                            fontweight="bold", color="#F2F5F1", zorder=8,
+                            path_effects=[pe.withStroke(linewidth=2.8,
+                                                        foreground="#10151A")])
             ax.set_xticks([])
             ax.set_yticks([])
+            for sp in ax.spines.values():
+                sp.set_edgecolor(BORDURE)
+            for coll in ax.collections:                      # barre de legende
+                cb = getattr(coll, "colorbar", None)
+                if cb is not None:
+                    cb.ax.yaxis.set_tick_params(color=TEXTE, labelcolor=TEXTE)
+                    cb.outline.set_edgecolor(BORDURE)
+                    cb.set_label(cb.ax.get_ylabel(), color=TEXTE)
             fig.tight_layout()
             st.pyplot(fig, width="stretch")
             if variable == "Avancement":
