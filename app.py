@@ -143,11 +143,92 @@ def _diagnostic_secrets():
     return "Voici ce que Streamlit voit dans les secrets :\n\n" + "\n".join(lignes)
 
 
+VERT_CLAIR = "#8DC63F"
+SABLE = "#F7F7F4"
+GRIS = "#6b6b66"
+
+CSS = """
+<style>
+  #MainMenu, footer {visibility:hidden;}
+  .block-container {padding-top:1.4rem; padding-bottom:2rem; max-width:1500px;}
+
+  .entete {background:linear-gradient(100deg,#14472A 0%,#1B5E36 45%,#2E7D4B 100%);
+           color:#fff; padding:18px 24px; border-radius:10px; margin-bottom:20px;
+           box-shadow:0 2px 10px rgba(20,71,42,.18);}
+  .entete h1 {margin:0; font-size:27px; font-weight:700; letter-spacing:-.2px;}
+  .entete p  {margin:6px 0 0 0; font-size:14px; opacity:.88; max-width:900px;}
+
+  .fiche {background:#fff; border:1px solid #e6e6df; border-left:4px solid #1B5E36;
+          border-radius:8px; padding:12px 16px; height:100%;}
+  .fiche .lib  {font-size:12.5px; color:#6b6b66; text-transform:uppercase;
+                letter-spacing:.4px; margin:0 0 6px 0; line-height:1.25;}
+  .fiche .val  {font-size:27px; font-weight:700; color:#1a1a1a; line-height:1;}
+  .fiche .note {font-size:12px; color:#6b6b66; margin-top:5px;}
+  .fiche.alerte {border-left-color:#B01B2E;}
+  .fiche.veille {border-left-color:#F4A93B;}
+  .fiche.neutre {border-left-color:#c9c9c1;}
+
+  .rubrique {font-size:17px; font-weight:700; color:#1B5E36; margin:22px 0 2px 0;}
+  .rubrique + hr {margin:6px 0 14px 0; border:none; border-top:2px solid #e2e8e3;}
+
+  .stTabs [data-baseweb="tab-list"] {gap:2px; border-bottom:1px solid #e6e6df;}
+  .stTabs [data-baseweb="tab"] {padding:9px 18px; font-size:14.5px; font-weight:600;
+                               color:#6b6b66; background:transparent;}
+  .stTabs [aria-selected="true"] {color:#1B5E36 !important;
+                                  border-bottom:3px solid #1B5E36 !important;}
+
+  section[data-testid="stSidebar"] {background:#F7F7F4; border-right:1px solid #e6e6df;}
+  section[data-testid="stSidebar"] img {margin-bottom:6px; border-radius:4px;}
+
+  div[data-testid="stMetricValue"] {font-size:25px; font-weight:700;}
+  div[data-testid="stMetricLabel"] {color:#6b6b66;}
+  .stDataFrame {border:1px solid #e6e6df; border-radius:8px;}
+  .pied {color:#8a8a84; font-size:12px; border-top:1px solid #e6e6df;
+         margin-top:26px; padding-top:12px;}
+</style>
+"""
+
+
 def bandeau(titre, sous_titre):
+    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(f"<div class='entete'><h1>{titre}</h1><p>{sous_titre}</p></div>",
+                unsafe_allow_html=True)
+
+
+def fiche(colonne, libelle, valeur, note=None, ton="normal"):
+    """Carte d'indicateur. ton : normal, alerte, veille, neutre."""
+    classe = "fiche" if ton == "normal" else f"fiche {ton}"
+    html = (f"<div class='{classe}'><p class='lib'>{libelle}</p>"
+            f"<div class='val'>{valeur}</div>")
+    if note:
+        html += f"<div class='note'>{note}</div>"
+    colonne.markdown(html + "</div>", unsafe_allow_html=True)
+
+
+def rubrique(texte):
+    st.markdown(f"<div class='rubrique'>{texte}</div><hr>", unsafe_allow_html=True)
+
+
+def habiller(fig, hauteur=None):
+    """Mise en forme commune des graphiques Plotly."""
+    fig.update_layout(
+        font=dict(family="Source Sans Pro, Segoe UI, sans-serif", size=13, color="#1a1a1a"),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=0, r=40, t=28, b=0),
+        xaxis=dict(gridcolor="#ecece6", zeroline=False),
+        yaxis=dict(gridcolor="#ecece6", zeroline=False),
+        title_font=dict(size=14, color="#1B5E36"),
+    )
+    if hauteur:
+        fig.update_layout(height=hauteur)
+    return fig
+
+
+def attente(message):
     st.markdown(
-        f"<div style='background:{VERT};color:#fff;padding:14px 20px;border-radius:6px;"
-        f"margin-bottom:18px'><h1 style='margin:0;font-size:26px'>{titre}</h1>"
-        f"<p style='margin:4px 0 0 0;font-size:14px;opacity:.9'>{sous_titre}</p></div>",
+        f"<div style='background:{SABLE};border:1px dashed #d6d6ce;border-radius:10px;"
+        f"padding:34px 24px;text-align:center;color:{GRIS};margin-top:8px'>"
+        f"<div style='font-size:30px;margin-bottom:8px'>⏳</div>{message}</div>",
         unsafe_allow_html=True)
 
 
@@ -706,14 +787,17 @@ if socio.empty and carac.empty:
 # --- indicateurs generaux
 cible_totale = CIBLE_MENAGES * len(COMMUNES_SOURCE)
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Ménages à équiper en sacs", f"{cible_totale}",
-          help=f"{CIBLE_MENAGES} par commune sur {len(COMMUNES_SOURCE)} communes à la source")
-c2.metric("Fiches ménage reçues", f"{len(socio)}",
-          f"{len(socio) / cible_totale * 100:.0f} % de la cible")
-c3.metric("Échantillons triés", f"{len(carac)}")
-c4.metric("Communes couvertes",
-          f"{socio['commune'].nunique() if not socio.empty else 0} / {len(COMMUNES)}")
-st.divider()
+part = len(socio) / cible_totale * 100 if cible_totale else 0
+fiche(c1, "Ménages à équiper en sacs", f"{cible_totale}",
+      f"{CIBLE_MENAGES} par commune sur {len(COMMUNES_SOURCE)} communes à la source",
+      "neutre")
+fiche(c2, "Fiches ménage reçues", f"{len(socio)}", f"{part:.0f} % de la cible",
+      "normal" if part >= 50 else "veille")
+fiche(c3, "Échantillons triés", f"{len(carac)}", "questionnaire de caractérisation")
+nb_com = socio["commune"].nunique() if not socio.empty else 0
+fiche(c4, "Communes couvertes", f"{nb_com} / {len(COMMUNES)}",
+      "au moins une fiche reçue", "normal" if nb_com else "neutre")
+st.write("")
 
 onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
                    "Composition", "Questionnaires"])
@@ -736,11 +820,16 @@ with onglets[0]:
     tot_recu = suivi.loc[suivi["Cible sacs"] > 0, "Fiches reçues"].sum()
 
     a, b, c, d = st.columns(4)
-    a.metric("Cible totale", f"{tot_cible} sacs")
-    b.metric("Reçu", f"{tot_recu}", f"{tot_recu / tot_cible * 100:.0f} %")
-    c.metric("Reste à faire", f"{max(tot_cible - tot_recu, 0)}")
-    d.metric("Communes à 100 %",
-             f"{int((suivi['Avancement'] >= 1).sum())} / {len(COMMUNES_SOURCE)}")
+    pc = tot_recu / tot_cible * 100 if tot_cible else 0
+    fiche(a, "Cible totale", f"{tot_cible}", "sacs à distribuer", "neutre")
+    fiche(b, "Reçu", f"{tot_recu}", f"{pc:.0f} % de la cible",
+          "normal" if pc >= 50 else "veille")
+    fiche(c, "Reste à faire", f"{max(tot_cible - tot_recu, 0)}", "sacs",
+          "veille" if tot_cible - tot_recu > 0 else "normal")
+    finies = int((suivi["Avancement"] >= 1).sum())
+    fiche(d, "Communes à 100 %", f"{finies} / {len(COMMUNES_SOURCE)}",
+          "cible atteinte", "normal" if finies else "neutre")
+    st.write("")
 
     try:
         import plotly.graph_objects as go
@@ -857,8 +946,8 @@ with onglets[1]:
 # ---------------------------------------------------------------- THEMATIQUE
 with onglets[2]:
     if socio.empty:
-        st.info("Cette vue s'appuie sur les fiches ménage du questionnaire "
-                "socio-démographique. Aucune n'est encore arrivée de Kobo.")
+        attente("Cette vue s'appuie sur les fiches ménage du questionnaire "
+                "socio-démographique.<br>Aucune n'est encore arrivée de Kobo.")
     else:
         dims = {"Commune": "commune", "Région": "region", "Strate d'habitat": "strate"}
         dispo = {k: v for k, v in dims.items() if v in socio.columns}
@@ -871,12 +960,15 @@ with onglets[2]:
 
             ens = calcul_indicateurs(socio)
             k = st.columns(4)
-            for i, (lib, unite) in enumerate([
-                    ("Ménages desservis", "%"), ("Brûlage des déchets", "%"),
-                    ("Tri déjà pratiqué à la source", "%"), ("Disposés à payer", "%")]):
+            resume_cles = [("Ménages desservis", "normal"),
+                           ("Brûlage des déchets", "alerte"),
+                           ("Tri déjà pratiqué à la source", "normal"),
+                           ("Disposés à payer", "normal")]
+            for i, (lib, ton) in enumerate(resume_cles):
                 val = ens.get(lib)
-                k[i].metric(lib, "n.d." if val is None else f"{val:.0f} {unite}")
-            st.caption(f"Ensemble des {len(socio)} fiches ménage reçues.")
+                fiche(k[i], lib, "n.d." if val is None else f"{val:.0f} %",
+                      f"sur {len(socio)} fiches", ton if val is not None else "neutre")
+            st.write("")
             st.divider()
 
             familles = []
@@ -887,7 +979,7 @@ with onglets[2]:
             noms = [n for f, n, u, s in INDICATEURS if f in choix_fam]
 
             for fam in choix_fam:
-                st.subheader(fam)
+                rubrique(fam)
                 sous = [(n, u, s) for f, n, u, s in INDICATEURS if f == fam]
                 for nom, unite, sens in sous:
                     if nom not in tab.columns:
@@ -928,7 +1020,7 @@ with onglets[2]:
                                    .replace(",", " "))
 
             st.divider()
-            st.subheader("Tableau complet")
+            rubrique("Tableau complet")
             st.dataframe(tab.round(1), hide_index=True, width="stretch")
             st.download_button("Télécharger les indicateurs",
                                tab.to_csv(index=False).encode("utf-8"),
@@ -943,18 +1035,22 @@ with onglets[2]:
 # ---------------------------------------------------------------- QUALITE
 with onglets[3]:
     if socio.empty and carac.empty:
-        st.info("Aucune soumission reçue de Kobo pour l'instant. Les contrôles "
-                "s'activeront dès les premières fiches.")
+        attente("Aucune soumission reçue de Kobo pour l'instant.<br>"
+                "Les contrôles s'activeront dès les premières fiches.")
     else:
         a1 = controler_socio(socio)
         a2 = controler_carac(carac, pesees)
         anomalies = pd.concat([a1, a2], ignore_index=True) if len(a1) or len(a2) else pd.DataFrame()
         nb = lambda g: int((anomalies["gravité"] == g).sum()) if not anomalies.empty else 0  # noqa: E731
         q1, q2, q3, q4 = st.columns(4)
-        q1.metric("Soumissions contrôlées", len(socio) + len(carac))
-        q2.metric("Bloquantes", nb("Bloquant"))
-        q3.metric("À vérifier", nb("À vérifier"))
-        q4.metric("Informations", nb("Information"))
+        fiche(q1, "Soumissions contrôlées", f"{len(socio) + len(carac)}",
+              "fiches ménage et fiches de tri", "neutre")
+        fiche(q2, "Bloquantes", f"{nb('Bloquant')}", "à corriger avant analyse",
+              "alerte" if nb("Bloquant") else "normal")
+        fiche(q3, "À vérifier", f"{nb('À vérifier')}", "à confirmer sur le terrain",
+              "veille" if nb("À vérifier") else "normal")
+        fiche(q4, "Informations", f"{nb('Information')}", "sans action requise", "neutre")
+        st.write("")
 
         if nb("Bloquant"):
             st.error(f"{nb('Bloquant')} anomalies bloquantes à corriger avant analyse.")
@@ -974,15 +1070,15 @@ with onglets[3]:
         if not anomalies.empty:
             g, d = st.columns([2, 3])
             with g:
-                st.subheader("Par contrôle")
+                rubrique("Par contrôle")
                 st.dataframe(anomalies.groupby(["gravité", "contrôle"]).size()
                              .reset_index(name="Nombre").sort_values("Nombre", ascending=False),
                              hide_index=True, width="stretch")
             with d:
-                st.subheader("Par commune")
+                rubrique("Par commune")
                 st.dataframe(anomalies.groupby(["commune", "gravité"]).size()
                              .unstack(fill_value=0), width="stretch")
-            st.subheader("Détail")
+            rubrique("Détail")
             st.dataframe(anomalies, hide_index=True, width="stretch", height=380)
             st.download_button("Télécharger les anomalies",
                                anomalies.to_csv(index=False).encode("utf-8"),
@@ -991,8 +1087,8 @@ with onglets[3]:
 # ---------------------------------------------------------------- COMPOSITION
 with onglets[4]:
     if carac.empty or pesees is None:
-        st.info("Cette vue s'appuie sur les fiches de tri. Aucune n'est encore arrivée "
-            "de Kobo.")
+        attente("Cette vue s'appuie sur les fiches de tri.<br>"
+                "Aucune n'est encore arrivée de Kobo.")
     else:
         cats = pesees[~pesees["globale"]]
         cols = [c for c in cats["name"] if c in carac.columns]
@@ -1006,10 +1102,13 @@ with onglets[4]:
             masses = sel[cols].apply(pd.to_numeric, errors="coerce")
             total = float(masses.sum().sum())
             m1, m2, m3 = st.columns(3)
-            m1.metric("Échantillons", len(sel))
-            m2.metric("Masse brute cumulée",
-                      f"{sel['masse_brute'].sum():,.0f} kg".replace(",", " "))
-            m3.metric("Masse triée", f"{total:,.0f} kg".replace(",", " "))
+            fiche(m1, "Échantillons", f"{len(sel)}", "fiches de tri retenues", "neutre")
+            fiche(m2, "Masse brute cumulée",
+                  f"{sel['masse_brute'].sum():,.0f}".replace(",", " ") + " kg",
+                  "avant quartage")
+            fiche(m3, "Masse triée", f"{total:,.0f}".replace(",", " ") + " kg",
+                  "somme des fractions pesées")
+            st.write("")
 
             par_cat = (masses.sum().rename("kg").reset_index()
                        .rename(columns={"index": "name"})
@@ -1040,7 +1139,7 @@ with onglets[4]:
 # ---------------------------------------------------------------- QUESTIONNAIRES
 with onglets[5]:
     if f_socio is None and f_carac is None:
-        st.info("Les deux questionnaires XLSForm ne sont pas dans le dépôt.")
+        attente("Les deux questionnaires XLSForm ne sont pas dans le dépôt.")
     else:
         dispo = [n for n, f in [("Enquête socio-démographique", f_socio),
                                 ("Caractérisation des déchets", f_carac)] if f is not None]
@@ -1048,9 +1147,10 @@ with onglets[5]:
         form = f_socio if choix.startswith("Enquête") else f_carac
         r = resume(form)
         k1, k2, k3 = st.columns(3)
-        k1.metric("Questions", r["questions"])
-        k2.metric("Sections", r["groupes"])
-        k3.metric("Listes de choix", r["listes"])
+        fiche(k1, "Questions", f"{r['questions']}", "hors métadonnées", "neutre")
+        fiche(k2, "Sections", f"{r['groupes']}", "groupes du formulaire", "neutre")
+        fiche(k3, "Listes de choix", f"{r['listes']}", "modalités prédéfinies", "neutre")
+        st.write("")
         q = form["questions"]
         st.dataframe(q.groupby("groupe").size().reset_index(name="Questions"),
                      hide_index=True, width="stretch")
@@ -1063,6 +1163,10 @@ with onglets[5]:
                      f"soit {len(cats)} pesées, plus {int(pesees['globale'].sum())} "
                      "masses globales.")
 
-st.divider()
-st.caption("La collecte se fait dans ODK Collect ou KoboCollect, hors connexion. "
-           "Cette application lit les soumissions une fois synchronisées.")
+st.markdown(
+    "<div class='pied'>Suivi de la caractérisation des déchets ménagers, Pôle Nord. "
+    "La collecte se fait dans ODK Collect ou KoboCollect, hors connexion ; cette "
+    "application lit les soumissions une fois synchronisées.<br>"
+    f"Cible de {CIBLE_MENAGES} ménages par commune sur {len(COMMUNES_SOURCE)} communes "
+    "en MODECOM à la source. Population de référence : ANSD, RGPH-5 2023.</div>",
+    unsafe_allow_html=True)
