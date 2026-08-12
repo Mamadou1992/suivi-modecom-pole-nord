@@ -540,57 +540,58 @@ if manquants:
             ". Les déposer dans un dossier `donnees` pour activer les pesées et la "
             "structure des questionnaires. Le reste fonctionne sans eux.")
 
-# --- source des donnees
+# --- source des donnees : KoboToolbox en direct, sans autre option
 sec = secrets_kobo()
-kobo_pret = bool(sec.get("token"))
-
-st.sidebar.header("Source des données")
-choix_source = ["KoboToolbox (direct)", "Fichiers exportés"]
-mode = st.sidebar.radio("Origine des soumissions", choix_source,
-                        index=0 if kobo_pret else 1)
 socio_brut = carac_brut = None
 derniere = None
 
-if mode == "Fichiers exportés":
-    f1 = st.sidebar.file_uploader("Premier export", type=["csv", "xlsx"])
-    f2 = st.sidebar.file_uploader("Second export", type=["csv", "xlsx"])
-    socio_brut, carac_brut = repartir([charger_fichier(f) for f in (f1, f2) if f])
-    st.sidebar.caption("L'ordre n'a pas d'importance, chaque export est reconnu "
-                       "à son contenu.")
+st.sidebar.header("KoboToolbox")
+
+if sec.get("token"):
+    url = sec.get("url") or KOBO_URL
+    token = sec["token"]
+    uid1 = sec.get("uid_1") or KOBO_UID_1
+    uid2 = sec.get("uid_2") or KOBO_UID_2
+    st.sidebar.caption(f"Connexion directe à {url}")
 else:
-    if kobo_pret:
-        url = sec.get("url") or KOBO_URL
-        token = sec["token"]
-        uid1 = sec.get("uid_1") or KOBO_UID_1
-        uid2 = sec.get("uid_2") or KOBO_UID_2
-        st.sidebar.caption(f"Connexion automatique à {url}")
-    else:
-        st.sidebar.warning("Aucun jeton dans les secrets. Le saisir ici, ou l'ajouter "
-                           "sous `[kobo] token` pour une connexion automatique.")
-        url = st.sidebar.text_input("Serveur Kobo", KOBO_URL)
-        token = st.sidebar.text_input("Jeton d'API", "", type="password")
-        uid1 = st.sidebar.text_input("Premier formulaire", KOBO_UID_1)
-        uid2 = st.sidebar.text_input("Second formulaire", KOBO_UID_2)
+    st.sidebar.error(
+        "Le jeton d'API n'est pas dans les secrets. Ajouter ce bloc dans "
+        "Manage app, Settings, Secrets :\n\n"
+        "```toml\n[kobo]\nurl = \"https://kf.kobotoolbox.org\"\n"
+        "token = \"votre_jeton\"\nuid_1 = \"identifiant_du_1er_formulaire\"\n"
+        "uid_2 = \"identifiant_du_2e_formulaire\"\n```")
+    st.sidebar.caption("En attendant, saisir les paramètres ici.")
+    url = st.sidebar.text_input("Serveur Kobo", KOBO_URL)
+    token = st.sidebar.text_input("Jeton d'API", "", type="password")
+    uid1 = st.sidebar.text_input("Premier formulaire", KOBO_UID_1)
+    uid2 = st.sidebar.text_input("Second formulaire", KOBO_UID_2)
 
-    if st.sidebar.button("Actualiser maintenant", width="stretch",
-                         help="Force une nouvelle lecture, sans attendre les 5 minutes"):
-        recuperer_kobo.clear()
-        st.rerun()
+if st.sidebar.button("Actualiser maintenant", width="stretch",
+                     help="Force une nouvelle lecture, sans attendre les 5 minutes"):
+    recuperer_kobo.clear()
+    st.rerun()
 
-    if token:
-        try:
-            socio_brut, carac_brut, derniere = recuperer_kobo(url, token, uid1, uid2)
-        except Exception as e:
-            st.sidebar.error(f"Échec de la récupération : {e}")
-            st.sidebar.caption("Si vos formulaires sont sur le serveur européen, "
-                               "l'adresse est https://eu.kobotoolbox.org")
+if token:
+    try:
+        socio_brut, carac_brut, derniere = recuperer_kobo(url, token, uid1, uid2)
+    except Exception as e:
+        st.sidebar.error(f"Échec de la récupération : {e}")
+        st.sidebar.caption("Vérifier le jeton. Si vos formulaires sont sur le serveur "
+                           "européen, l'adresse est https://eu.kobotoolbox.org")
 
-    if derniere is not None:
-        age = int((pd.Timestamp.now() - derniere).total_seconds())
-        st.sidebar.success(f"Données du {derniere:%H:%M:%S}"
-                           + (f", il y a {age // 60} min" if age >= 60 else ", à l'instant"))
-        st.sidebar.caption(f"Relecture automatique de Kobo toutes les "
-                           f"{DUREE_CACHE // 60} minutes, à chaque interaction avec la page.")
+if derniere is not None:
+    age = int((pd.Timestamp.now() - derniere).total_seconds())
+    n1 = 0 if socio_brut is None else len(socio_brut)
+    n2 = 0 if carac_brut is None else len(carac_brut)
+    st.sidebar.success(f"{n1} fiches ménage et {n2} fiches de tri\n\n"
+                       f"Lecture du {derniere:%H:%M:%S}"
+                       + (f", il y a {age // 60} min" if age >= 60 else ", à l'instant"))
+    st.sidebar.caption(f"Relecture de Kobo toutes les {DUREE_CACHE // 60} minutes, "
+                       "à la première interaction avec la page.")
+    if n1 == 0 and n2 == 0:
+        st.sidebar.warning("La connexion fonctionne mais les deux formulaires sont "
+                           "vides. Vérifier que les fiches ont bien été envoyées "
+                           "depuis KoboCollect, et non laissées en brouillon.")
 
 socio = normalise_socio(socio_brut)
 carac = normalise_carac(carac_brut)
