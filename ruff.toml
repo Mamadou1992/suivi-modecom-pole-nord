@@ -1,0 +1,10 @@
+line-length = 120
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "W"]
+ignore = ["E402", "E701"]
+
+[lint.per-file-ignores]
+"pages/*.py" = ["E402"]
+"app.py" = ["E402"]

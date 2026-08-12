@@ -1,0 +1,21 @@
+# Secrets : ne jamais publier le jeton Kobo
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+.ruff_cache/
+*.py[cod]
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# Exports terrain, ne pas versionner les donnees personnelles des menages
+exports/
+*_export.csv
+*_submissions.csv
+
+# Systeme
+.DS_Store
+Thumbs.db
+desktop.ini
