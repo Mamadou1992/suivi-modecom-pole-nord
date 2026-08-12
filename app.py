@@ -93,16 +93,54 @@ def _empreinte(t):
     return hashlib.sha256(str(t).encode("utf-8")).hexdigest()
 
 
-def _attendue():
+CLES_MDP = ["mot_de_passe", "motdepasse", "password", "mdp"]
+CLES_EMPREINTE = ["empreinte_mot_de_passe", "empreinte", "hash"]
+
+
+def _lire_secrets():
+    """Renvoie (dictionnaire des secrets, message d'erreur eventuel)."""
     try:
-        app = st.secrets.get("app", {})
-    except Exception:
-        return None
-    if app.get("empreinte_mot_de_passe"):
-        return str(app["empreinte_mot_de_passe"]).strip().lower()
-    if app.get("mot_de_passe"):
-        return _empreinte(app["mot_de_passe"])
+        return dict(st.secrets), None
+    except Exception as e:
+        return {}, str(e)
+
+
+def _attendue():
+    """Empreinte attendue. Cherche dans [app], puis a la racine des secrets."""
+    secrets, _ = _lire_secrets()
+    sources = []
+    for nom in ("app", "App", "APP", "general"):
+        bloc = secrets.get(nom)
+        if hasattr(bloc, "keys"):
+            sources.append(bloc)
+    sources.append(secrets)          # cles posees sans section
+    for bloc in sources:
+        for c in CLES_EMPREINTE:
+            v = bloc.get(c) if hasattr(bloc, "get") else None
+            if v:
+                return str(v).strip().lower()
+        for c in CLES_MDP:
+            v = bloc.get(c) if hasattr(bloc, "get") else None
+            if v:
+                return _empreinte(v)
     return None
+
+
+def _diagnostic_secrets():
+    """Decrit ce que Streamlit voit, sans jamais afficher de valeur."""
+    secrets, err = _lire_secrets()
+    if err:
+        return f"Streamlit ne trouve aucun secret. Message : {err}"
+    if not secrets:
+        return "Streamlit lit bien les secrets, mais ils sont vides."
+    lignes = []
+    for cle, val in secrets.items():
+        if hasattr(val, "keys"):
+            lignes.append(f"- section `[{cle}]` contenant : "
+                          + ", ".join(f"`{k}`" for k in val.keys()))
+        else:
+            lignes.append(f"- clé `{cle}` posée hors section")
+    return "Voici ce que Streamlit voit dans les secrets :\n\n" + "\n".join(lignes)
 
 
 def bandeau(titre, sous_titre):
@@ -121,6 +159,12 @@ def exiger_mot_de_passe():
         bandeau("Suivi MODECOM Pôle Nord", "Accès réservé à l'équipe du projet")
         st.error("Aucun mot de passe n'est configuré. Ajouter dans les secrets :\n\n"
                  "```toml\n[app]\nmot_de_passe = \"votre_mot_de_passe\"\n```")
+        st.warning(_diagnostic_secrets())
+        st.caption(
+            "Sur Streamlit Cloud : Manage app, menu à trois points, Settings, onglet "
+            "Secrets. Vérifier que les guillemets sont droits et qu'aucun espace ne "
+            "précède la ligne [app]. Après enregistrement, redémarrer avec Reboot app."
+        )
         st.stop()
     bandeau("Suivi MODECOM Pôle Nord", "Accès réservé à l'équipe du projet")
     with st.form("connexion"):
