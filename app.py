@@ -701,7 +701,7 @@ if derniere is not None:
 socio = normalise_socio(socio_brut)
 carac = normalise_carac(carac_brut)
 if socio.empty and carac.empty:
-    st.sidebar.info("Aucune soumission chargée pour l'instant.")
+    st.sidebar.info("Aucune soumission sur Kobo pour l'instant.")
 
 # --- indicateurs generaux
 cible_totale = CIBLE_MENAGES * len(COMMUNES_SOURCE)
@@ -857,7 +857,8 @@ with onglets[1]:
 # ---------------------------------------------------------------- THEMATIQUE
 with onglets[2]:
     if socio.empty:
-        st.info("Cette vue s'appuie sur les fiches ménage. Aucune n'est encore arrivée.")
+        st.info("Cette vue s'appuie sur les fiches ménage du questionnaire "
+                "socio-démographique. Aucune n'est encore arrivée de Kobo.")
     else:
         dims = {"Commune": "commune", "Région": "region", "Strate d'habitat": "strate"}
         dispo = {k: v for k, v in dims.items() if v in socio.columns}
@@ -942,7 +943,8 @@ with onglets[2]:
 # ---------------------------------------------------------------- QUALITE
 with onglets[3]:
     if socio.empty and carac.empty:
-        st.info("Aucune soumission chargée. Choisir une source dans la barre latérale.")
+        st.info("Aucune soumission reçue de Kobo pour l'instant. Les contrôles "
+                "s'activeront dès les premières fiches.")
     else:
         a1 = controler_socio(socio)
         a2 = controler_carac(carac, pesees)
@@ -989,8 +991,8 @@ with onglets[3]:
 # ---------------------------------------------------------------- COMPOSITION
 with onglets[4]:
     if carac.empty or pesees is None:
-        st.info("Cette vue demande les soumissions de caractérisation et le questionnaire "
-                "correspondant.")
+        st.info("Cette vue s'appuie sur les fiches de tri. Aucune n'est encore arrivée "
+            "de Kobo.")
     else:
         cats = pesees[~pesees["globale"]]
         cols = [c for c in cats["name"] if c in carac.columns]
