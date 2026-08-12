@@ -177,8 +177,40 @@ CSS = """
   .stTabs [aria-selected="true"] {color:#1B5E36 !important;
                                   border-bottom:3px solid #1B5E36 !important;}
 
-  section[data-testid="stSidebar"] {background:#F7F7F4; border-right:1px solid #e6e6df;}
+  /* l'application reste en clair, meme si le navigateur est en mode sombre */
+  .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"]
+      {background:#ffffff; color:#1a1a1a;}
+  .stApp p, .stApp li, .stApp label, .stApp span, .stApp h1, .stApp h2, .stApp h3,
+  .stApp h4, .stApp h5, .stApp h6 {color:#1a1a1a;}
+  [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p
+      {color:#5f5f5a !important;}
+
+  section[data-testid="stSidebar"] {background:#EDF2EE; border-right:1px solid #d5ded7;}
   section[data-testid="stSidebar"] img {margin-bottom:6px; border-radius:4px;}
+  /* lisibilite de la barre laterale : texte force en fonce */
+  section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
+  section[data-testid="stSidebar"] h3, section[data-testid="stSidebar"] p,
+  section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] li,
+  section[data-testid="stSidebar"] .stMarkdown,
+  section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p
+      {color:#14472A !important;}
+  section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+  section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p
+      {color:#4a5a4f !important;}
+  section[data-testid="stSidebar"] h2 {font-size:16px; font-weight:700;
+      letter-spacing:.3px; text-transform:uppercase;}
+  /* champs de saisie de la barre laterale */
+  section[data-testid="stSidebar"] input, section[data-testid="stSidebar"] textarea
+      {background:#fff !important; color:#1a1a1a !important;
+       border:1px solid #c9d5cd !important;}
+  /* bouton principal de la barre laterale */
+  section[data-testid="stSidebar"] .stButton button
+      {background:#1B5E36; color:#fff !important; border:none; font-weight:600;}
+  section[data-testid="stSidebar"] .stButton button:hover {background:#14472A;}
+  section[data-testid="stSidebar"] .stButton button p {color:#fff !important;}
+  /* encadres d'etat, garder un fond clair et un texte lisible */
+  section[data-testid="stSidebar"] [data-testid="stAlert"] {color:#1a1a1a;}
+  section[data-testid="stSidebar"] [data-testid="stAlert"] p {color:#1a1a1a !important;}
 
   div[data-testid="stMetricValue"] {font-size:25px; font-weight:700;}
   div[data-testid="stMetricLabel"] {color:#6b6b66;}
