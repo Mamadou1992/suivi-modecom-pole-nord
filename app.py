@@ -25,12 +25,41 @@ RACINE = Path(__file__).resolve().parent
 DOSSIERS_DONNEES = [RACINE / "donnees", RACINE]
 
 FORM_SOCIO = "Enquête socio-démographique  MODECOM Pôle Nord.xlsx"
-FORM_CARAC = "Caractérisation des déchets MODECOM_v2.xlsx"
+FORM_CARAC = "Questionnaire caractérisation MODECOM.xlsx"
+FORM_CARAC_ANCIEN = "Caractérisation des déchets MODECOM_v2.xlsx"
+FORM_SITES_AGRO = "Identification et cartographie des sites — Agro-pastoral (Pôle Nord).xlsx"
+FORM_TRI_AGRO = "Caractérisation agro-pastorale (A1–A6) — MODECOM Pôle Nord.xlsx"
 FICHIER_GPKG = "Caracterisation_communes.gpkg"
 
 KOBO_URL = "https://kf.kobotoolbox.org"
-KOBO_UID_1 = "a6g6VnmqYqVBf33QhXUVe3"
-KOBO_UID_2 = "aG2BGSMEib9xWfRzoeXcXm"
+
+# Roles des formulaires. Les identifiants connus sont declares ici ;
+# ceux qui ne le sont pas sont reconnus a leur contenu.
+ROLE_MENAGES, ROLE_TRI = "menages", "tri"
+ROLE_SITES_AGRO, ROLE_TRI_AGRO = "sites_agro", "tri_agro"
+
+UID_ROLES = {
+    "avQNVABnKjUArYNJj8RDxd": ROLE_TRI,          # caractérisation MODECOM, à jour
+    "aSnArkcnDbH4pDqq9uDFTy": ROLE_SITES_AGRO,   # identification des sites agro-pastoraux
+    "aCvQFPEqY9sPUGjXFLPh6q": ROLE_TRI_AGRO,     # caractérisation agro-pastorale A1-A6
+}
+# les deux formulaires historiques, dont le role se devine au contenu
+UIDS_DEFAUT = ["a6g6VnmqYqVBf33QhXUVe3", "aG2BGSMEib9xWfRzoeXcXm",
+               "avQNVABnKjUArYNJj8RDxd", "aSnArkcnDbH4pDqq9uDFTy",
+               "aCvQFPEqY9sPUGjXFLPh6q"]
+
+FORMULAIRES = {
+    ROLE_MENAGES:    {"titre": "Enquête socio-démographique", "fichier": FORM_SOCIO},
+    ROLE_TRI:        {"titre": "Caractérisation des déchets", "fichier": FORM_CARAC},
+    ROLE_SITES_AGRO: {"titre": "Sites agro-pastoraux", "fichier": FORM_SITES_AGRO},
+    ROLE_TRI_AGRO:   {"titre": "Caractérisation agro-pastorale", "fichier": FORM_TRI_AGRO},
+}
+
+CATEGORIES_AGRO = {
+    "a1": "A1 déjections animales", "a2": "A2 résidus de cultures",
+    "a3": "A3 déchets d'abattage", "a4": "A4 emballages agricoles",
+    "a5": "A5 cuirs et peaux", "a6": "A6 inertes agro-pastoraux",
+}
 
 CV_HYPOTHESE = 0.40
 MARGE_CIBLE = 0.10
@@ -411,21 +440,64 @@ def charger_kobo(base_url, token, uid, timeout=60):
 
 DUREE_CACHE = 300  # secondes : au-dela, les soumissions sont relues sur Kobo
 
+SIGNES = {
+    ROLE_MENAGES: {"menage_id", "a1_total", "a2_present", "consentement", "strate"},
+    ROLE_TRI: {"masse_totale_brute", "Infrastructure_concern_e", "Nom_du_Circuit",
+               "nombre_sachets_distribues", "mode_caracterisation"},
+    ROLE_SITES_AGRO: {"categories_presentes", "accessibilite", "type_activite", "site"},
+    ROLE_TRI_AGRO: {"masse_a1", "masse_a3", "te_a1", "momov_a1", "categorie"},
+}
+
+
+def deviner_role(df):
+    """Role d'un jeu de soumissions, d'apres ses colonnes."""
+    if df is None or getattr(df, "empty", True):
+        return None
+    cols = {str(c).split("/")[-1] for c in df.columns}
+    scores = {r: len(cols & sig) for r, sig in SIGNES.items()}
+    meilleur = max(scores, key=scores.get)
+    return meilleur if scores[meilleur] > 0 else None
+
 
 @st.cache_data(ttl=DUREE_CACHE, show_spinner="Récupération des soumissions sur Kobo...")
-def recuperer_kobo(url, token, uid1, uid2):
-    """Recupere les deux formulaires et les range. Resultat garde 5 minutes."""
-    jeux = [charger_kobo(url, token, u) for u in (uid1, uid2) if u]
-    socio, carac = repartir(jeux)
-    return socio, carac, pd.Timestamp.now()
+def recuperer_kobo(url, token, uids):
+    """Recupere tous les formulaires et les range par role.
+
+    Un identifiant declare dans UID_ROLES prend ce role ; les autres sont
+    reconnus a leur contenu. Plusieurs formulaires d'un meme role sont
+    empiles, ce qui permet de garder l'ancienne et la nouvelle version
+    d'une meme fiche.
+    """
+    par_role, journal = {}, []
+    for uid in uids:
+        if not uid:
+            continue
+        df = charger_kobo(url, token, uid)
+        role = UID_ROLES.get(uid) or deviner_role(df)
+        journal.append({"Formulaire": uid,
+                        "Rôle": FORMULAIRES.get(role, {}).get("titre", "non reconnu"),
+                        "Soumissions": 0 if df is None else len(df)})
+        if role is None:
+            continue
+        par_role.setdefault(role, []).append(df)
+    jeux = {r: pd.concat(v, ignore_index=True) if len(v) > 1 else v[0]
+            for r, v in par_role.items()}
+    return jeux, pd.DataFrame(journal), pd.Timestamp.now()
 
 
 def secrets_kobo():
+    """Adresse, jeton et liste des identifiants declares dans les secrets."""
     try:
-        s = st.secrets.get("kobo", {})
+        sec = st.secrets.get("kobo", {})
     except Exception:
-        return {}
-    return {k: s.get(k, "") for k in ("url", "token", "uid_1", "uid_2")}
+        return {"url": "", "token": "", "uids": []}
+    uids = []
+    for cle in sorted(sec.keys()):
+        if str(cle).lower().startswith("uid"):
+            v = str(sec[cle]).strip()
+            if v and v not in uids:
+                uids.append(v)
+    return {"url": sec.get("url", ""), "token": sec.get("token", ""), "uids": uids}
 
 
 def charger_fichier(f):
@@ -537,6 +609,74 @@ def normalise_carac(df):
     for c in ("masse_brute", "masse_quartage", "masse_nette"):
         if c in df:
             df[c] = pd.to_numeric(df[c], errors="coerce")
+    if "date" in df:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    return df
+
+
+COLS_SITES_AGRO = {
+    "date": ["date_releve", "_submission_time"], "technicien": ["technicien"],
+    "superviseur": ["superviseur"], "commune": ["commune"], "site": ["site"],
+    "type_activite": ["type_activite"], "categories": ["categories_presentes"],
+    "accessibilite": ["accessibilite"], "contact": ["contact_local"],
+    "observations": ["observations"], "gps": ["gps"],
+}
+
+COLS_TRI_AGRO = {
+    "date": ["date_collecte", "_submission_time"], "technicien": ["technicien"],
+    "superviseur": ["superviseur"], "commune": ["commune"], "site": ["site"],
+    "type_activite": ["type_activite"], "categorie": ["categorie"],
+    "code_echantillon": ["code_echantillon"], "meteo": ["meteo"], "saison": ["saison"],
+    "methode": ["methode"], "masse_brute": ["masse_brute"],
+    "masse_quartage": ["masse_quartage"], "masse_nette": ["masse_nette"],
+    "masse_totale_caract": ["masse_totale_caract"],
+}
+
+
+def _coordonnees(df, colonne="gps"):
+    """Extrait latitude et longitude d'un champ geopoint de Kobo."""
+    if colonne not in df:
+        return df
+    brut = df[colonne].astype(str).str.strip()
+    parts = brut.str.split(r"\s+", expand=True)
+    if parts.shape[1] >= 2:
+        df["lat"] = pd.to_numeric(parts[0], errors="coerce")
+        df["lon"] = pd.to_numeric(parts[1], errors="coerce")
+    for a, b in (("_gps_latitude", "lat"), ("_gps_longitude", "lon")):
+        if a in df.columns and df.get(b) is None:
+            df[b] = pd.to_numeric(df[a], errors="coerce")
+    return df
+
+
+def normalise_sites_agro(df):
+    if df is None or getattr(df, "empty", True):
+        return pd.DataFrame()
+    df = df.copy()
+    df.columns = [str(c).split("/")[-1] for c in df.columns]
+    df = _renomme(df, COLS_SITES_AGRO)
+    if "commune" in df:
+        df["commune"] = df["commune"].map(rapproche_commune)
+    if "date" in df:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    return _coordonnees(df)
+
+
+def normalise_tri_agro(df):
+    if df is None or getattr(df, "empty", True):
+        return pd.DataFrame()
+    df = df.copy()
+    df.columns = [str(c).split("/")[-1] for c in df.columns]
+    df = _renomme(df, COLS_TRI_AGRO)
+    if "commune" in df:
+        df["commune"] = df["commune"].map(rapproche_commune)
+    for c in ["masse_brute", "masse_quartage", "masse_nette", "masse_totale_caract"]:
+        if c in df:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    for cle in CATEGORIES_AGRO:
+        for prefixe in ("masse", "te", "momov", "pci", "da"):
+            col = f"{prefixe}_{cle}"
+            if col in df:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
     if "date" in df:
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
     return df
@@ -752,6 +892,7 @@ bandeau("Suivi de la campagne MODECOM Pôle Nord",
 
 # --- questionnaires, facultatifs au demarrage
 f_socio = f_carac = pesees = None
+f_sites_agro = f_tri_agro = None
 p1, p2 = chemin(FORM_SOCIO), chemin(FORM_CARAC)
 manquants = [n for n, p in [(FORM_SOCIO, p1), (FORM_CARAC, p2)] if p is None]
 if p1:
@@ -765,6 +906,14 @@ if p2:
         pesees = table_pesees(f_carac)
     except Exception as e:
         st.warning(f"Lecture du questionnaire de caractérisation impossible : {e}")
+f_sites_agro = f_tri_agro = None
+for nom, cible in ((FORM_SITES_AGRO, "f_sites_agro"), (FORM_TRI_AGRO, "f_tri_agro")):
+    pc = chemin(nom)
+    if pc:
+        try:
+            globals()[cible] = charger_form(pc)
+        except Exception as e:
+            st.warning(f"Lecture de « {nom} » impossible : {e}")
 if manquants:
     st.info("Fichiers absents du dépôt : " + ", ".join(f"`{m}`" for m in manquants) +
             ". Les déposer dans un dossier `donnees` pour activer les pesées et la "
@@ -772,29 +921,28 @@ if manquants:
 
 # --- source des donnees : KoboToolbox en direct, sans autre option
 sec = secrets_kobo()
-socio_brut = carac_brut = None
-derniere = None
+jeux, journal, derniere = {}, pd.DataFrame(), None
 
 st.sidebar.header("KoboToolbox")
 
 if sec.get("token"):
     url = sec.get("url") or KOBO_URL
     token = sec["token"]
-    uid1 = sec.get("uid_1") or KOBO_UID_1
-    uid2 = sec.get("uid_2") or KOBO_UID_2
+    uids = sec.get("uids") or UIDS_DEFAUT
     st.sidebar.caption(f"Connexion directe à {url}")
+    st.sidebar.caption(f"{len(uids)} formulaires interrogés")
 else:
     st.sidebar.error(
         "Le jeton d'API n'est pas dans les secrets. Ajouter ce bloc dans "
         "Manage app, Settings, Secrets :\n\n"
         "```toml\n[kobo]\nurl = \"https://kf.kobotoolbox.org\"\n"
-        "token = \"votre_jeton\"\nuid_1 = \"identifiant_du_1er_formulaire\"\n"
-        "uid_2 = \"identifiant_du_2e_formulaire\"\n```")
+        "token = \"votre_jeton\"\nuid_1 = \"...\"\nuid_2 = \"...\"\n```")
     st.sidebar.caption("En attendant, saisir les paramètres ici.")
     url = st.sidebar.text_input("Serveur Kobo", KOBO_URL)
     token = st.sidebar.text_input("Jeton d'API", "", type="password")
-    uid1 = st.sidebar.text_input("Premier formulaire", KOBO_UID_1)
-    uid2 = st.sidebar.text_input("Second formulaire", KOBO_UID_2)
+    saisis = st.sidebar.text_area("Identifiants des formulaires, un par ligne",
+                                  "\n".join(UIDS_DEFAUT), height=140)
+    uids = [x.strip() for x in saisis.splitlines() if x.strip()]
 
 if st.sidebar.button("Actualiser maintenant", width="stretch",
                      help="Force une nouvelle lecture, sans attendre les 5 minutes"):
@@ -803,25 +951,30 @@ if st.sidebar.button("Actualiser maintenant", width="stretch",
 
 if token:
     try:
-        socio_brut, carac_brut, derniere = recuperer_kobo(url, token, uid1, uid2)
+        jeux, journal, derniere = recuperer_kobo(url, token, tuple(uids))
     except Exception as e:
         st.sidebar.error(f"Échec de la récupération : {e}")
-        st.sidebar.caption("Vérifier le jeton d'API et les deux identifiants de "
+        st.sidebar.caption("Vérifier le jeton d'API et les identifiants de "
                            "formulaire dans les secrets.")
+
+socio = normalise_socio(jeux.get(ROLE_MENAGES))
+carac = normalise_carac(jeux.get(ROLE_TRI))
+sites_agro = normalise_sites_agro(jeux.get(ROLE_SITES_AGRO))
+tri_agro = normalise_tri_agro(jeux.get(ROLE_TRI_AGRO))
 
 if derniere is not None:
     age = int((pd.Timestamp.now() - derniere).total_seconds())
-    n1 = 0 if socio_brut is None else len(socio_brut)
-    n2 = 0 if carac_brut is None else len(carac_brut)
-    st.sidebar.success(f"{n1} fiches ménage et {n2} fiches de tri\n\n"
-                       f"Lecture du {derniere:%H:%M:%S}"
-                       + (f", il y a {age // 60} min" if age >= 60 else ", à l'instant"))
+    st.sidebar.success(
+        f"{len(socio)} fiches ménage, {len(carac)} fiches de tri\n\n"
+        f"{len(sites_agro)} sites agro, {len(tri_agro)} tris agro\n\n"
+        f"Lecture du {derniere:%H:%M:%S}"
+        + (f", il y a {age // 60} min" if age >= 60 else ", à l'instant"))
     st.sidebar.caption(f"Relecture de Kobo toutes les {DUREE_CACHE // 60} minutes, "
                        "à la première interaction avec la page.")
+    with st.sidebar.expander("Formulaires interrogés"):
+        st.dataframe(journal, hide_index=True, width="stretch")
 
-socio = normalise_socio(socio_brut)
-carac = normalise_carac(carac_brut)
-if socio.empty and carac.empty:
+if all(x.empty for x in (socio, carac, sites_agro, tri_agro)):
     st.sidebar.info("Aucune soumission sur Kobo pour l'instant.")
 
 # --- indicateurs generaux
@@ -840,7 +993,7 @@ fiche(c4, "Communes couvertes", f"{nb_com} / {len(COMMUNES)}",
 st.write("")
 
 onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
-                   "Composition", "Questionnaires"])
+                   "Composition", "Agro-pastoral", "Questionnaires"])
 
 # ---------------------------------------------------------------- AVANCEMENT
 with onglets[0]:
@@ -1188,15 +1341,123 @@ with onglets[4]:
                                agrege.to_csv(index=False).encode("utf-8"),
                                "composition_modecom.csv", "text/csv")
 
-# ---------------------------------------------------------------- QUESTIONNAIRES
+# ---------------------------------------------------------------- AGRO-PASTORAL
 with onglets[5]:
-    if f_socio is None and f_carac is None:
+    if sites_agro.empty and tri_agro.empty:
+        attente("Aucun site agro-pastoral ni tri A1 à A6 reçu de Kobo.<br>"
+                "Ces deux formulaires couvrent Ogo et Bokidiawé.")
+    else:
+        a1, a2, a3, a4 = st.columns(4)
+        fiche(a1, "Sites recensés", f"{len(sites_agro)}", "zones de parcage, marchés…",
+              "normal" if len(sites_agro) else "neutre")
+        n_gps = int(sites_agro["lat"].notna().sum()) if "lat" in sites_agro else 0
+        fiche(a2, "Sites géolocalisés", f"{n_gps}",
+              "points GPS exploitables",
+              "normal" if n_gps == len(sites_agro) and n_gps else "veille")
+        fiche(a3, "Échantillons triés", f"{len(tri_agro)}", "fiches A1 à A6",
+              "normal" if len(tri_agro) else "neutre")
+        masse = tri_agro["masse_nette"].sum() if "masse_nette" in tri_agro else 0
+        fiche(a4, "Masse nette triée", f"{masse:,.0f}".replace(",", " ") + " kg",
+              "cumul des campagnes")
+        st.write("")
+
+        if not sites_agro.empty:
+            rubrique("Sites recensés")
+            g, d = st.columns([3, 2])
+            with g:
+                if "type_activite" in sites_agro:
+                    compte = {}
+                    for lib in ["parcage", "abattage", "marche", "abreuvement", "autre"]:
+                        m = _contient(sites_agro, "type_activite", lib)
+                        if m is not None and m.any():
+                            compte[lib] = int(m.sum())
+                    if compte:
+                        libelles = {"parcage": "Zone de parcage",
+                                    "abattage": "Abattage informel",
+                                    "marche": "Marché à bétail",
+                                    "abreuvement": "Point d'abreuvement",
+                                    "autre": "Autre"}
+                        act = pd.DataFrame({"Activité": [libelles[k] for k in compte],
+                                            "Sites": list(compte.values())})
+                        try:
+                            import plotly.express as px
+                            f = px.bar(act.sort_values("Sites"), x="Sites", y="Activité",
+                                       orientation="h")
+                            f.update_traces(marker_color=VERT_CLAIR)
+                            st.plotly_chart(habiller(f, 300), width="stretch")
+                        except Exception:
+                            st.bar_chart(act.set_index("Activité"))
+            with d:
+                if "commune" in sites_agro:
+                    st.dataframe(
+                        sites_agro.groupby("commune").size().reset_index(name="Sites"),
+                        hide_index=True, width="stretch")
+                if "accessibilite" in sites_agro:
+                    st.dataframe(
+                        sites_agro.groupby("accessibilite").size()
+                        .reset_index(name="Sites"), hide_index=True, width="stretch")
+
+            cols = [c for c in ["commune", "site", "type_activite", "categories",
+                                "accessibilite", "contact", "lat", "lon", "date"]
+                    if c in sites_agro.columns]
+            st.dataframe(sites_agro[cols], hide_index=True, width="stretch", height=300)
+            st.download_button("Télécharger les sites",
+                               sites_agro[cols].to_csv(index=False).encode("utf-8"),
+                               "sites_agro_pastoraux.csv", "text/csv")
+
+        if not tri_agro.empty:
+            rubrique("Composition agro-pastorale, A1 à A6")
+            lignes = []
+            for cle, lib in CATEGORIES_AGRO.items():
+                col = f"masse_{cle}"
+                if col in tri_agro:
+                    lignes.append({"Catégorie": lib,
+                                   "Masse (kg)": float(tri_agro[col].sum()),
+                                   "Teneur en eau (%)": tri_agro.get(f"te_{cle}",
+                                                                     pd.Series(dtype=float)).mean()})
+            if lignes:
+                comp = pd.DataFrame(lignes)
+                total = comp["Masse (kg)"].sum()
+                comp["Part (%)"] = comp["Masse (kg)"] / total * 100 if total else 0
+                g, d = st.columns([3, 2])
+                with g:
+                    try:
+                        import plotly.express as px
+                        f = px.bar(comp.sort_values("Masse (kg)"), x="Part (%)",
+                                   y="Catégorie", orientation="h",
+                                   text=comp.sort_values("Masse (kg)")["Part (%)"]
+                                   .map(lambda v: f"{v:.1f} %"))
+                        f.update_traces(marker_color=VERT_CLAIR, textposition="outside",
+                                        cliponaxis=False)
+                        st.plotly_chart(habiller(f, 340), width="stretch")
+                    except Exception:
+                        st.bar_chart(comp.set_index("Catégorie")["Part (%)"])
+                with d:
+                    st.dataframe(comp.round(1), hide_index=True, width="stretch")
+                st.download_button("Télécharger la composition agro-pastorale",
+                                   comp.to_csv(index=False).encode("utf-8"),
+                                   "composition_agro.csv", "text/csv")
+                st.caption("La teneur en eau conditionne le potentiel de compostage "
+                           "et de méthanisation ; elle n'est renseignée que pour les "
+                           "catégories qui la prévoient.")
+
+
+# ---------------------------------------------------------------- QUESTIONNAIRES
+with onglets[6]:
+    if all(f is None for f in (f_socio, f_carac, f_sites_agro, f_tri_agro)):
         attente("Les deux questionnaires XLSForm ne sont pas dans le dépôt.")
     else:
         dispo = [n for n, f in [("Enquête socio-démographique", f_socio),
-                                ("Caractérisation des déchets", f_carac)] if f is not None]
+                                ("Caractérisation des déchets", f_carac),
+                                ("Sites agro-pastoraux", f_sites_agro),
+                                ("Caractérisation agro-pastorale", f_tri_agro)]
+                 if f is not None]
         choix = st.radio("Questionnaire", dispo, horizontal=True)
-        form = f_socio if choix.startswith("Enquête") else f_carac
+        formulaires_dispo = {"Enquête socio-démographique": f_socio,
+                             "Caractérisation des déchets": f_carac,
+                             "Sites agro-pastoraux": f_sites_agro,
+                             "Caractérisation agro-pastorale": f_tri_agro}
+        form = formulaires_dispo[choix]
         r = resume(form)
         k1, k2, k3 = st.columns(3)
         fiche(k1, "Questions", f"{r['questions']}", "hors métadonnées", "neutre")
@@ -1208,7 +1469,7 @@ with onglets[5]:
                      hide_index=True, width="stretch")
         st.dataframe(q[["groupe", "type", "name", "label"]], hide_index=True,
                      width="stretch", height=380)
-        if not choix.startswith("Enquête") and pesees is not None:
+        if choix == "Caractérisation des déchets" and pesees is not None:
             cats = pesees[~pesees["globale"]]
             st.write(f"{cats['categorie'].nunique()} sous-catégories déclinées en "
                      f"{cats['granulometrie'].nunique()} granulométries, "
