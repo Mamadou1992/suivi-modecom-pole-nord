@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Suivi MODECOM Pôle Nord", page_icon="♻️", layout="wide")
+st.set_page_config(page_title="Suivi de la caractérisation - Pôle Nord", page_icon="♻️", layout="wide")
 
 # =====================================================================
 # CONFIGURATION
@@ -306,7 +306,8 @@ def exiger_mot_de_passe():
         return True
     attendue = _attendue()
     if attendue is None:
-        bandeau("Suivi MODECOM Pôle Nord", "Accès réservé à l'équipe du projet")
+        bandeau("Suivi de la campagne de Caractérisation Pôle Nord",
+                "Accès réservé à l'équipe du projet")
         st.error("Aucun mot de passe n'est configuré. Ajouter dans les secrets :\n\n"
                  "```toml\n[app]\nmot_de_passe = \"votre_mot_de_passe\"\n```")
         st.warning(_diagnostic_secrets())
@@ -316,7 +317,8 @@ def exiger_mot_de_passe():
             "précède la ligne [app]. Après enregistrement, redémarrer avec Reboot app."
         )
         st.stop()
-    bandeau("Suivi MODECOM Pôle Nord", "Accès réservé à l'équipe du projet")
+    bandeau("Suivi de la campagne de Caractérisation Pôle Nord",
+                "Accès réservé à l'équipe du projet")
     with st.form("connexion"):
         saisi = st.text_input("Mot de passe", type="password")
         valider = st.form_submit_button("Entrer")
@@ -886,7 +888,7 @@ if st.sidebar.button("Se déconnecter", width="stretch"):
     st.rerun()
 st.sidebar.divider()
 
-bandeau("Suivi de la campagne MODECOM Pôle Nord",
+bandeau("Suivi de la campagne de Caractérisation Pôle Nord",
         "12 communes des régions de Saint-Louis et de Matam - avancement, "
         "qualité des données et composition des déchets")
 
@@ -1477,7 +1479,7 @@ with onglets[6]:
                      "masses globales.")
 
 st.markdown(
-    "<div class='pied'>Suivi de la caractérisation des déchets ménagers, Pôle Nord. "
+    "<div class='pied'>Suivi de la campagne de Caractérisation, Pôle Nord. "
     "La collecte se fait dans ODK Collect ou KoboCollect, hors connexion ; cette "
     "application lit les soumissions une fois synchronisées.<br>"
     f"Cible de {CIBLE_MENAGES} ménages par commune sur {len(COMMUNES_SOURCE)} communes "
