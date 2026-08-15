@@ -24,7 +24,7 @@ st.set_page_config(page_title="Suivi de la caractérisation - Pôle Nord", page_
 RACINE = Path(__file__).resolve().parent
 DOSSIERS_DONNEES = [RACINE / "donnees", RACINE]
 
-FORM_SOCIO = "Enquête socio-démographique  MODECOM Pôle Nord.xlsx"
+FORM_SOCIO = "Enquête ménage MODECOM Pôle Nord.xlsx"
 FORM_CARAC = "Questionnaire caractérisation MODECOM.xlsx"
 FORM_CARAC_ANCIEN = "Caractérisation des déchets MODECOM_v2.xlsx"
 FORM_SITES_AGRO = "Identification et cartographie des sites — Agro-pastoral (Pôle Nord).xlsx"
@@ -48,7 +48,7 @@ UID_ROLES = {
 UIDS_DEFAUT = list(UID_ROLES)
 
 FORMULAIRES = {
-    ROLE_MENAGES:    {"titre": "Enquête socio-démographique", "fichier": FORM_SOCIO},
+    ROLE_MENAGES:    {"titre": "Enquête ménage", "fichier": FORM_SOCIO},
     ROLE_TRI:        {"titre": "Caractérisation des déchets", "fichier": FORM_CARAC},
     ROLE_SITES_AGRO: {"titre": "Sites agro-pastoraux", "fichier": FORM_SITES_AGRO},
     ROLE_TRI_AGRO:   {"titre": "Caractérisation agro-pastorale", "fichier": FORM_TRI_AGRO},
@@ -442,7 +442,8 @@ def charger_kobo(base_url, token, uid, timeout=60):
 DUREE_CACHE = 300  # secondes : au-dela, les soumissions sont relues sur Kobo
 
 SIGNES = {
-    ROLE_MENAGES: {"menage_id", "a1_total", "a2_present", "consentement", "strate"},
+    ROLE_MENAGES: {"menage_id", "nb_total", "nb_present", "consentement",
+                   "tri_source", "dispose_trier"},
     ROLE_TRI: {"masse_totale_brute", "Infrastructure_concern_e", "Nom_du_Circuit",
                "nombre_sachets_distribues", "mode_caracterisation"},
     ROLE_SITES_AGRO: {"categories_presentes", "accessibilite", "type_activite", "site"},
@@ -516,7 +517,7 @@ def charger_fichier(f):
     return pd.read_csv(io.BytesIO(donnees))
 
 
-SIGNES_SOCIO = {"menage_id", "a1_total", "a2_present", "consentement", "strate"}
+SIGNES_SOCIO = {"menage_id", "nb_total", "nb_present", "consentement"}
 SIGNES_CARAC = {"masse_totale_brute", "masse_apres_quartage", "masse_nette_totale",
                 "code_echantillon", "Infrastructure_concern_e"}
 
@@ -550,10 +551,21 @@ def repartir(jeux):
 
 COLS_SOCIO = {
     "menage_id": ["menage_id"], "commune": ["commune"], "region": ["region"],
-    "quartier": ["quartier"], "strate": ["strate"], "milieu": ["milieu"],
-    "enqueteur": ["enqueteur"], "superviseur": ["superviseur"],
-    "consentement": ["consentement"], "a1_total": ["a1_total"],
-    "a2_present": ["a2_present"], "gps": ["gps"],
+    "quartier": ["quartier"], "strate": ["strate"], "logement": ["logement"],
+    "revenu": ["revenu"], "enqueteur": ["enqueteur"],
+    "consentement": ["consentement"],
+    "nb_total": ["nb_total", "a1_total"], "nb_present": ["nb_present", "a2_present"],
+    "recipient": ["recipient", "c1_recipient"], "service": ["service", "d1_service"],
+    "operateur": ["operateur", "d2_operateur"],
+    "frequence": ["frequence", "d4_frequence"],
+    "pratiques": ["pratiques", "e1_pratiques"],
+    "tri_source": ["tri_source", "e2_tri"], "materiaux": ["materiaux", "e2_materiaux"],
+    "dispose_trier": ["dispose_trier", "f2_tri"],
+    "elevage": ["elevage", "g1_elevage"], "especes": ["especes"],
+    "effectif": ["effectif"], "fumier": ["fumier", "g3_fumier"],
+    "residus_agri": ["residus_agri", "g4_residus"],
+    "saison_var": ["saison_var", "g5_saison"],
+    "observations": ["observations", "i_observations"], "gps": ["gps"],
     "date": ["today", "date", "_submission_time", "end"],
 }
 COLS_CARAC = {
@@ -588,7 +600,7 @@ def normalise_socio(df):
     df = _renomme(df, COLS_SOCIO)
     if "commune" in df:
         df["commune"] = df["commune"].map(rapproche_commune)
-    for c in ("a1_total", "a2_present"):
+    for c in ("nb_total", "nb_present", "effectif"):
         if c in df:
             df[c] = pd.to_numeric(df[c], errors="coerce")
     if "date" in df:
@@ -762,13 +774,13 @@ def controler_socio(df):
         dup = df[df.duplicated("menage_id", keep=False) & df["menage_id"].notna()]
         _ajoute(a, "Bloquant", Q, "Identifiant de ménage en doublon", dup, "menage_id",
                 "Le même numéro de sac apparaît plusieurs fois")
-    if {"a1_total", "a2_present"} <= set(df.columns):
+    if {"nb_total", "nb_present"} <= set(df.columns):
         _ajoute(a, "Bloquant", Q, "Présents supérieurs à l'effectif",
-                df[df["a2_present"] > df["a1_total"]], "menage_id",
-                lambda r: f"{r['a2_present']:.0f} présents pour {r['a1_total']:.0f} résidents")
+                df[df["nb_present"] > df["nb_total"]], "menage_id",
+                lambda r: f"{r['nb_present']:.0f} présents pour {r['nb_total']:.0f} résidents")
         _ajoute(a, "À vérifier", Q, "Ménage de taille inhabituelle",
-                df[df["a1_total"] > 40], "menage_id",
-                lambda r: f"{r['a1_total']:.0f} personnes déclarées")
+                df[df["nb_total"] > 40], "menage_id",
+                lambda r: f"{r['nb_total']:.0f} personnes déclarées")
     if "consentement" in df:
         _ajoute(a, "Information", Q, "Refus de participation",
                 df[df["consentement"].astype(str).str.lower().str.startswith("non")],
@@ -856,61 +868,65 @@ def _moyenne(df, col):
     return float(v.mean()) if v.notna().any() else None
 
 
-# libelle, unite, sens (True = plus c'est haut mieux c'est)
+# famille, libelle, unite, sens (True = plus c'est haut mieux c'est)
 INDICATEURS = [
     ("Service de collecte", "Ménages desservis", "%", True),
     ("Service de collecte", "Collecte assurée par la SONAGED", "%", True),
+    ("Service de collecte", "Collecte par un opérateur informel ou aucun", "%", False),
     ("Service de collecte", "Collecte irrégulière", "%", False),
-    ("Service de collecte", "Distance au point de collecte", "m", False),
-    ("Service de collecte", "Ménages satisfaits", "%", True),
+    ("Stockage", "Poubelle avec couvercle", "%", True),
+    ("Stockage", "Sac plastique ou aucun récipient", "%", False),
     ("Pratiques d'élimination", "Brûlage des déchets", "%", False),
     ("Pratiques d'élimination", "Enfouissement", "%", False),
     ("Pratiques d'élimination", "Dépôt sauvage", "%", False),
     ("Pratiques d'élimination", "Compostage ou alimentation du bétail", "%", True),
-    ("Tri et valorisation", "Tri déjà pratiqué à la source", "%", True),
-    ("Tri et valorisation", "Passage de récupérateurs informels", "%", True),
-    ("Tri et valorisation", "Connaissent le tri et le recyclage", "%", True),
-    ("Disposition", "Disposés à trier", "%", True),
-    ("Disposition", "Disposés à payer", "%", True),
-    ("Disposition", "Redevance déjà payée", "%", True),
-    ("Disposition", "Montant acceptable", "FCFA/mois", True),
+    ("Pratiques d'élimination", "Réutilisation, don ou vente", "%", True),
+    ("Tri et disposition", "Tri déjà pratiqué à la source", "%", True),
+    ("Tri et disposition", "Disposés à trier", "%", True),
+    ("Tri et disposition", "Disposés à trier sans condition", "%", True),
+    ("Agro-pastoral", "Ménages pratiquant l'élevage", "%", None),
+    ("Agro-pastoral", "Cheptel moyen des éleveurs", "têtes", None),
+    ("Agro-pastoral", "Fumier rejeté ou non géré", "%", False),
+    ("Agro-pastoral", "Production variant selon la saison", "%", None),
     ("Ménage", "Taille moyenne du ménage", "pers.", None),
+    ("Ménage", "Personnes présentes pendant l'enquête", "pers.", None),
 ]
 
 
 def calcul_indicateurs(df):
-    """Renvoie un dictionnaire indicateur -> valeur pour un sous-ensemble."""
+    """Dictionnaire indicateur -> valeur, pour un sous-ensemble de fiches."""
     if df is None or df.empty:
         return {}
-    v = {
-        "Ménages desservis": _part(_est_oui(df, "d1_service")),
-        "Collecte assurée par la SONAGED": _part(
-            _contient(df, "d2_operateur", "sonaged")),
-        "Collecte irrégulière": _part(_contient(df, "d4_frequence", "irregul", "irrégul")),
-        "Distance au point de collecte": _moyenne(df, "d6_distance"),
-        "Ménages satisfaits": _part(_contient(df, "d8_satisfaction", "tres", "très", "satisfait")
-                                    if "d8_satisfaction" in df else None),
-        "Brûlage des déchets": _part(_contient(df, "e1_pratiques", "brulage", "brûlage")),
-        "Enfouissement": _part(_contient(df, "e1_pratiques", "enfouissement")),
-        "Dépôt sauvage": _part(_contient(df, "e1_pratiques", "depot_sauvage", "dépôt sauvage")),
-        "Compostage ou alimentation du bétail": _part(
-            _contient(df, "e1_pratiques", "compostage", "betail", "bétail")),
-        "Tri déjà pratiqué à la source": _part(_est_oui(df, "e2_tri")),
-        "Passage de récupérateurs informels": _part(_est_oui(df, "e3_recuperateurs")),
-        "Connaissent le tri et le recyclage": _part(
-            _contient(df, "f1_connaissance", "bien", "un_peu", "un peu")),
-        "Disposés à trier": _part(_contient(df, "f2_tri", "oui", "sous_conditions",
-                                            "sous conditions")),
-        "Disposés à payer": _part(_est_oui(df, "f3_payer")),
-        "Redevance déjà payée": _part(_est_oui(df, "d7_redevance")),
-        "Montant acceptable": _moyenne(df, "f3_montant"),
-        "Taille moyenne du ménage": _moyenne(df, "a1_total"),
+    eleveurs = df[_est_oui(df, "elevage")] if "elevage" in df else df.iloc[0:0]
+    return {
+        "Ménages desservis": _part(_est_oui(df, "service")),
+        "Collecte assurée par la SONAGED": _part(_contient(df, "operateur", "sonaged")),
+        "Collecte par un opérateur informel ou aucun":
+            _part(_contient(df, "operateur", "informel", "aucun")),
+        "Collecte irrégulière": _part(_contient(df, "frequence", "irregul", "irrégul")),
+        "Poubelle avec couvercle": _part(_contient(df, "recipient", "poubelle")),
+        "Sac plastique ou aucun récipient":
+            _part(_contient(df, "recipient", "sac", "autre")),
+        "Brûlage des déchets": _part(_contient(df, "pratiques", "brulage", "brûlage")),
+        "Enfouissement": _part(_contient(df, "pratiques", "enfouissement")),
+        "Dépôt sauvage": _part(_contient(df, "pratiques", "depot_sauvage",
+                                         "dépôt sauvage")),
+        "Compostage ou alimentation du bétail":
+            _part(_contient(df, "pratiques", "compostage", "betail", "bétail")),
+        "Réutilisation, don ou vente":
+            _part(_contient(df, "pratiques", "reutilisation", "don", "vente")),
+        "Tri déjà pratiqué à la source": _part(_est_oui(df, "tri_source")),
+        "Disposés à trier": _part(_contient(df, "dispose_trier", "oui",
+                                            "sous_conditions", "sous conditions")),
+        "Disposés à trier sans condition": _part(_est_oui(df, "dispose_trier")),
+        "Ménages pratiquant l'élevage": _part(_est_oui(df, "elevage")),
+        "Cheptel moyen des éleveurs": _moyenne(eleveurs, "effectif"),
+        "Fumier rejeté ou non géré": _part(_contient(df, "fumier", "rejete", "rejeté",
+                                                     "non géré")),
+        "Production variant selon la saison": _part(_est_oui(df, "saison_var")),
+        "Taille moyenne du ménage": _moyenne(df, "nb_total"),
+        "Personnes présentes pendant l'enquête": _moyenne(df, "nb_present"),
     }
-    # "Ménages satisfaits" : eviter de compter "peu satisfait" et "pas satisfait"
-    if "d8_satisfaction" in df:
-        s = _txt(df["d8_satisfaction"])
-        v["Ménages satisfaits"] = _part(s.isin(["tres", "très satisfait", "satisfait"]))
-    return v
 
 
 def tableau_thematique(df, dimension):
@@ -1266,10 +1282,12 @@ with onglets[2]:
         attente("Cette vue s'appuie sur les fiches ménage du questionnaire "
                 "socio-démographique.<br>Aucune n'est encore arrivée de Kobo.")
     else:
-        dims = {"Commune": "commune", "Région": "region", "Strate d'habitat": "strate"}
+        dims = {"Commune": "commune", "Région": "region",
+                "Strate (standing)": "strate", "Type de logement": "logement",
+                "Revenu du ménage": "revenu"}
         dispo = {k: v for k, v in dims.items() if v in socio.columns}
         if not dispo:
-            st.warning("Les colonnes commune, région et strate sont absentes des fiches.")
+            st.warning("Les colonnes de comparaison sont absentes des fiches.")
         else:
             dim_label = st.radio("Comparer par", list(dispo), horizontal=True)
             dim = dispo[dim_label]
@@ -1280,7 +1298,7 @@ with onglets[2]:
             resume_cles = [("Ménages desservis", "normal"),
                            ("Brûlage des déchets", "alerte"),
                            ("Tri déjà pratiqué à la source", "normal"),
-                           ("Disposés à payer", "normal")]
+                           ("Disposés à trier", "normal")]
             for i, (lib, ton) in enumerate(resume_cles):
                 val = ens.get(lib)
                 fiche(k[i], lib, "n.d." if val is None else f"{val:.0f} %",
