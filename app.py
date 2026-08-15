@@ -1113,18 +1113,32 @@ with onglets[0]:
                        "suivi_avancement.csv", "text/csv")
 
 # ---------------------------------------------------------------- CARTE
+FONDS = {
+    "Plan OpenStreetMap": {
+        "tuiles": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "credit": "© OpenStreetMap contributors"},
+    "Image satellite": {
+        "tuiles": "https://server.arcgisonline.com/ArcGIS/rest/services/"
+                  "World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "credit": "Esri, Maxar, Earthstar Geographics"},
+    "Relief clair": {
+        "tuiles": "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/"
+                  "{z}/{x}/{y}{r}.png",
+        "credit": "© OpenStreetMap contributors, © CARTO"},
+    "Fond sombre": {
+        "tuiles": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        "credit": "© OpenStreetMap contributors, © CARTO"},
+}
+
+
 with onglets[1]:
     p_gpkg = chemin(FICHIER_GPKG)
     if p_gpkg is None:
-        st.info(f"Le fond de carte `{FICHIER_GPKG}` n'est pas dans le dépôt. "
+        attente(f"Le fond de carte `{FICHIER_GPKG}` n'est pas dans le dépôt.<br>"
                 "Le déposer dans un dossier `donnees` pour activer cette vue.")
     else:
         try:
             import geopandas as gpd
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-            import matplotlib.patheffects as pe
 
             @st.cache_data(show_spinner=False)
             def charger_couches(p):
@@ -1141,73 +1155,110 @@ with onglets[1]:
             communes_geo["cible"] = communes_geo["commune"].apply(
                 lambda c: CIBLE_MENAGES if c in COMMUNES_SOURCE else 0)
             communes_geo["avancement"] = [
-                (r / c * 100) if c else float("nan")
+                round(r / c * 100) if c else None
                 for r, c in zip(communes_geo["recus"], communes_geo["cible"])]
 
-            variable = st.radio("Variable cartographiée",
-                                ["Avancement", "Méthode", "Population 2023"], horizontal=True)
-            com = communes_geo.to_crs(3857)
-            fig, ax = plt.subplots(figsize=(13, 7.2), dpi=140)
-            fig.patch.set_facecolor(FOND)
-            ax.set_facecolor("#151C24")
-            if variable == "Méthode":
-                for m, coul in COULEURS.items():
-                    s = com[com["methode"] == m]
-                    if len(s):
-                        s.plot(ax=ax, facecolor=coul, edgecolor="#10151A", lw=1.0)
-            elif variable == "Population 2023":
-                com.plot(ax=ax, column="pop_2023", cmap="YlGn", edgecolor="#10151A", lw=0.8,
-                         legend=True, legend_kwds={"label": "Habitants (RGPH-5, 2023)",
-                                                   "shrink": 0.6})
-            else:
-                av = com.copy()
-                av["avancement"] = av["avancement"].fillna(-1)
-                hors, dans = av[av["avancement"] < 0], av[av["avancement"] >= 0]
-                if len(hors):
-                    hors.plot(ax=ax, facecolor="#242E38", edgecolor="#3A4650", lw=0.8,
-                              hatch="///")
-                if len(dans):
-                    dans.plot(ax=ax, column="avancement", cmap="RdYlGn", vmin=0, vmax=100,
-                              edgecolor="#10151A", lw=0.8, legend=True,
-                              legend_kwds={"label": "Avancement (%)", "shrink": 0.6})
-            if sites is not None:
-                for _, r in sites.to_crs(3857).iterrows():
-                    est_source = str(r["methode"]).startswith("MODECOM")
-                    ax.plot(r.geometry.x, r.geometry.y, marker="*" if est_source else "o",
-                            ms=18 if est_source else 9,
-                            mfc=COULEURS.get(r["methode"], "#888"), mec="#F2F5F1",
-                            mew=1.0, zorder=6)
-            for _, r in com.iterrows():
-                pt = r.geometry.representative_point()
-                etiq = r["commune"]
-                if variable == "Avancement" and r["cible"]:
-                    etiq += f"\n{r['recus']}/{r['cible']}"
-                ax.annotate(etiq, (pt.x, pt.y), ha="center", va="center", fontsize=7.5,
-                            fontweight="bold", color="#F2F5F1", zorder=8,
-                            path_effects=[pe.withStroke(linewidth=2.8,
-                                                        foreground="#10151A")])
-            ax.set_xticks([])
-            ax.set_yticks([])
-            for sp in ax.spines.values():
-                sp.set_edgecolor(BORDURE)
-            for coll in ax.collections:                      # barre de legende
-                cb = getattr(coll, "colorbar", None)
-                if cb is not None:
-                    cb.ax.yaxis.set_tick_params(color=TEXTE, labelcolor=TEXTE)
-                    cb.outline.set_edgecolor(BORDURE)
-                    cb.set_label(cb.ax.get_ylabel(), color=TEXTE)
-            fig.tight_layout()
-            st.pyplot(fig, width="stretch")
-            if variable == "Avancement":
-                st.caption("Les communes hachurées sont en prélèvement sur points de "
-                           "collecte : pas de cible en sacs, donc pas de taux d'avancement.")
-            cols = [c for c in ["commune", "region", "departement", "methode", "logist_cat",
-                                "pop_2023", "menages", "recus", "cible", "avancement"]
-                    if c in communes_geo.columns]
+            c1, c2 = st.columns([2, 3])
+            fond = c1.selectbox("Fond de carte", list(FONDS), index=0)
+            variable = c2.radio("Colorer les communes par",
+                                ["Méthode", "Avancement", "Population 2023"],
+                                horizontal=True)
+
+            def couleur(r):
+                if variable == "Méthode":
+                    return COULEURS.get(r["methode"], "#888888")
+                if variable == "Avancement":
+                    a = r["avancement"]
+                    if a is None:
+                        return "#5A6672"
+                    return "#B01B2E" if a < 34 else ("#F4A93B" if a < 67 else "#1B7F4B")
+                pop = r.get("pop_2023") or 0
+                bornes = [10000, 25000, 50000, 70000]
+                palette = ["#DCEBD2", "#A9D18E", "#6FBF73", "#2E9B57", "#146B3A"]
+                for i, b in enumerate(bornes):
+                    if pop < b:
+                        return palette[i]
+                return palette[-1]
+
+            try:
+                import folium
+                from streamlit_folium import st_folium
+
+                b = communes_geo.total_bounds
+                carte = folium.Map(
+                    location=[(b[1] + b[3]) / 2, (b[0] + b[2]) / 2],
+                    zoom_start=8, tiles=None, control_scale=True)
+                for nom, f in FONDS.items():
+                    folium.TileLayer(f["tuiles"], name=nom, attr=f["credit"],
+                                     overlay=False,
+                                     show=(nom == fond)).add_to(carte)
+
+                geo = communes_geo.to_crs(4326).copy()
+                geo["couleur"] = [couleur(r) for _, r in geo.iterrows()]
+                geo["_av"] = geo["avancement"].map(
+                    lambda v: "sans cible" if v is None else f"{v} %")
+                folium.GeoJson(
+                    geo.__geo_interface__, name="Communes",
+                    style_function=lambda x: {
+                        "fillColor": x["properties"]["couleur"], "color": "#FFFFFF",
+                        "weight": 1.2, "fillOpacity": 0.55},
+                    highlight_function=lambda x: {"weight": 3, "fillOpacity": 0.75},
+                    tooltip=folium.GeoJsonTooltip(
+                        fields=[c for c in ["commune", "methode", "pop_2023", "menages",
+                                            "recus", "_av"] if c in geo.columns],
+                        aliases=["Commune", "Méthode", "Population", "Ménages",
+                                 "Fiches reçues", "Avancement"][:len(
+                            [c for c in ["commune", "methode", "pop_2023", "menages",
+                                         "recus", "_av"] if c in geo.columns])],
+                        sticky=True),
+                ).add_to(carte)
+
+                if sites is not None and len(sites):
+                    grp = folium.FeatureGroup(name="Sites de tri", show=True)
+                    for _, r in sites.to_crs(4326).iterrows():
+                        folium.CircleMarker(
+                            [r.geometry.y, r.geometry.x], radius=7,
+                            color="#FFFFFF", weight=2,
+                            fill_color=COULEURS.get(r["methode"], "#888"),
+                            fill_opacity=1,
+                            popup=f"<b>{r['commune']}</b><br>{r['methode']}",
+                            tooltip=f"Site de {r['commune']}").add_to(grp)
+                    grp.add_to(carte)
+
+                if not sites_agro.empty and "lat" in sites_agro.columns:
+                    grp = folium.FeatureGroup(name="Sites agro-pastoraux", show=True)
+                    pts = sites_agro.dropna(subset=["lat", "lon"])
+                    for _, r in pts.iterrows():
+                        texte = f"<b>{r.get('site', 'site')}</b><br>{r.get('commune', '')}"
+                        if r.get("type_activite"):
+                            texte += f"<br>{r['type_activite']}"
+                        folium.Marker(
+                            [r["lat"], r["lon"]], popup=texte,
+                            tooltip=str(r.get("site", "site agro-pastoral")),
+                            icon=folium.Icon(color="green", icon="leaf")).add_to(grp)
+                    grp.add_to(carte)
+                    st.caption(f"{len(pts)} sites agro-pastoraux géolocalisés.")
+
+                folium.LayerControl(collapsed=False).add_to(carte)
+                st_folium(carte, width=None, height=560,
+                          returned_objects=[], key="carte_suivi")
+                st.caption(FONDS[fond]["credit"] +
+                           ". Limites communales : OpenStreetMap. "
+                           "Population : ANSD, RGPH-5 2023.")
+            except ImportError:
+                st.warning("Les paquets `folium` et `streamlit-folium` ne sont pas "
+                           "installés. Les ajouter à requirements.txt pour la carte "
+                           "interactive.")
+
+            rubrique("Détail par commune")
+            cols = [c for c in ["commune", "region", "departement", "methode",
+                                "logist_cat", "pop_2023", "menages", "recus", "cible",
+                                "avancement"] if c in communes_geo.columns]
             st.dataframe(communes_geo[cols].sort_values("commune"),
                          hide_index=True, width="stretch")
         except Exception as e:
             st.error(f"Rendu de la carte impossible : {e}")
+
 
 # ---------------------------------------------------------------- THEMATIQUE
 with onglets[2]:
