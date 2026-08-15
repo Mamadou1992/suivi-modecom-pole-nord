@@ -39,14 +39,13 @@ ROLE_MENAGES, ROLE_TRI = "menages", "tri"
 ROLE_SITES_AGRO, ROLE_TRI_AGRO = "sites_agro", "tri_agro"
 
 UID_ROLES = {
+    "aG2BGSMEib9xWfRzoeXcXm": ROLE_MENAGES,      # enquête socio-démographique
+    "a6g6VnmqYqVBf33QhXUVe3": ROLE_TRI,          # caractérisation MODECOM, 1re version
     "avQNVABnKjUArYNJj8RDxd": ROLE_TRI,          # caractérisation MODECOM, à jour
     "aSnArkcnDbH4pDqq9uDFTy": ROLE_SITES_AGRO,   # identification des sites agro-pastoraux
     "aCvQFPEqY9sPUGjXFLPh6q": ROLE_TRI_AGRO,     # caractérisation agro-pastorale A1-A6
 }
-# les deux formulaires historiques, dont le role se devine au contenu
-UIDS_DEFAUT = ["a6g6VnmqYqVBf33QhXUVe3", "aG2BGSMEib9xWfRzoeXcXm",
-               "avQNVABnKjUArYNJj8RDxd", "aSnArkcnDbH4pDqq9uDFTy",
-               "aCvQFPEqY9sPUGjXFLPh6q"]
+UIDS_DEFAUT = list(UID_ROLES)
 
 FORMULAIRES = {
     ROLE_MENAGES:    {"titre": "Enquête socio-démographique", "fichier": FORM_SOCIO},
