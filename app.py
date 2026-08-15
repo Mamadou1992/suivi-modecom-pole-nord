@@ -684,6 +684,66 @@ def normalise_tri_agro(df):
     return df
 
 
+# ---------------------------------------------------------------------
+# PHOTOS JOINTES AUX SOUMISSIONS
+# ---------------------------------------------------------------------
+@st.cache_data(ttl=1800, show_spinner=False)
+def telecharger_image(url, token):
+    """Recupere une piece jointe Kobo, qui exige le jeton d'API."""
+    import requests
+    r = requests.get(url, headers={"Authorization": f"Token {token}"}, timeout=60)
+    r.raise_for_status()
+    return r.content
+
+
+CLES_LEGENDE = ["commune", "site", "menage_id", "code_echantillon", "quartier"]
+
+
+def liens_photos(df, limite=24):
+    """Liste (url, legende) des images jointes aux soumissions."""
+    liens = []
+    if df is None or getattr(df, "empty", True) or "_attachments" not in df.columns:
+        return liens
+    for _, r in df.iterrows():
+        jointes = r.get("_attachments")
+        if not isinstance(jointes, list):
+            continue
+        for a in jointes:
+            if not isinstance(a, dict):
+                continue
+            if "image" not in str(a.get("mimetype", "")).lower():
+                continue
+            url = a.get("download_small_url") or a.get("download_url")
+            if not url:
+                continue
+            bouts = [str(r.get(c)) for c in CLES_LEGENDE
+                     if r.get(c) is not None and str(r.get(c)) not in ("nan", "")]
+            liens.append((url, " · ".join(bouts) or "sans identifiant"))
+            if len(liens) >= limite:
+                return liens
+    return liens
+
+
+def galerie(df, token, titre="Photos", colonnes=4, limite=24):
+    """Affiche les photos jointes, si le formulaire en contient."""
+    liens = liens_photos(df, limite)
+    if not liens:
+        return
+    rubrique(titre)
+    cols = st.columns(colonnes)
+    affichees = 0
+    for i, (url, legende) in enumerate(liens):
+        cible = cols[i % colonnes]
+        try:
+            cible.image(telecharger_image(url, token), caption=legende,
+                        width="stretch")
+            affichees += 1
+        except Exception:
+            cible.caption(f"Image indisponible · {legende}")
+    st.caption(f"{affichees} photos affichées, les plus récentes d'abord. "
+               "Les images restent hébergées sur Kobo, rien n'est copié ici.")
+
+
 # =====================================================================
 # CONTROLES QUALITE
 # =====================================================================
@@ -1237,6 +1297,7 @@ with onglets[2]:
                 "Un indicateur reste vide tant que la question correspondante n'a reçu "
                 "aucune réponse exploitable."
             )
+            galerie(socio, token, "Photos jointes aux fiches ménage")
 
 
 # ---------------------------------------------------------------- QUALITE
@@ -1342,6 +1403,7 @@ with onglets[4]:
             st.download_button("Télécharger la composition",
                                agrege.to_csv(index=False).encode("utf-8"),
                                "composition_modecom.csv", "text/csv")
+            galerie(carac, token, "Photos jointes aux fiches de tri")
 
 # ---------------------------------------------------------------- AGRO-PASTORAL
 with onglets[5]:
@@ -1442,6 +1504,9 @@ with onglets[5]:
                 st.caption("La teneur en eau conditionne le potentiel de compostage "
                            "et de méthanisation ; elle n'est renseignée que pour les "
                            "catégories qui la prévoient.")
+
+        galerie(sites_agro, token, "Photos des sites agro-pastoraux")
+        galerie(tri_agro, token, "Photos des campagnes de tri agro-pastoral")
 
 
 # ---------------------------------------------------------------- QUESTIONNAIRES
