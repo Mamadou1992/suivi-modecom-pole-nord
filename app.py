@@ -39,7 +39,8 @@ ROLE_MENAGES, ROLE_TRI = "menages", "tri"
 ROLE_SITES_AGRO, ROLE_TRI_AGRO = "sites_agro", "tri_agro"
 
 UID_ROLES = {
-    "aG2BGSMEib9xWfRzoeXcXm": ROLE_MENAGES,      # enquête socio-démographique
+    "aRuKgN8hXyDTyLRbSTLdNH": ROLE_MENAGES,      # enquête ménage, version en service
+    "aG2BGSMEib9xWfRzoeXcXm": ROLE_MENAGES,      # enquête socio-démographique, 1re version
     "a6g6VnmqYqVBf33QhXUVe3": ROLE_TRI,          # caractérisation MODECOM, 1re version
     "avQNVABnKjUArYNJj8RDxd": ROLE_TRI,          # caractérisation MODECOM, à jour
     "aSnArkcnDbH4pDqq9uDFTy": ROLE_SITES_AGRO,   # identification des sites agro-pastoraux
