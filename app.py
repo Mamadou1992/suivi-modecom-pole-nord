@@ -66,13 +66,14 @@ MARGE_CIBLE = 0.10
 CIBLE_MENAGES = 62
 # Cibles particulieres : Ranerou est en regime allege
 CIBLES_PARTICULIERES = {"Ranérou": 30}
+# Ces valeurs sont des plafonds : le terrain peut remonter moins de sacs.
 
 COMMUNES = {
     "Dagana":       {"infra": "CTT Dagana",  "region": "Saint-Louis", "methode": "Sur sites de collecte"},
     "Richard Toll": {"infra": "CTT Dagana",  "region": "Saint-Louis", "methode": "MODECOM à la source"},
     "Bokhol":       {"infra": "CIVD Bokhol", "region": "Saint-Louis", "methode": "Sur sites de collecte"},
     "Fanaye":       {"infra": "CIVD Bokhol", "region": "Saint-Louis", "methode": "MODECOM à la source"},
-    "Ndioum":       {"infra": "CIVD Ndioum", "region": "Saint-Louis", "methode": "Sur sites de collecte"},
+    "Ndioum":       {"infra": "CIVD Ndioum", "region": "Saint-Louis", "methode": "MODECOM à la source et sur sites"},
     "Podor":        {"infra": "CIVD Ndioum", "region": "Saint-Louis", "methode": "MODECOM à la source"},
     "Golléré":      {"infra": "CIVD Ndioum", "region": "Saint-Louis", "methode": "MODECOM à la source"},
     "Ogo":          {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM adapté agro-pastoral"},
@@ -97,6 +98,7 @@ CIBLE_TOTALE = sum(cible_commune(c) for c in COMMUNES)
 COULEURS = {
     "MODECOM à la source": "#1B7F4B",
     "MODECOM à la source, régime allégé": "#4FB477",
+    "MODECOM à la source et sur sites": "#2E9B6B",
     "MODECOM adapté agro-pastoral": "#8DC63F",
     "Sur sites de collecte": "#F4A93B",
     "Sur sites régime allégé": "#B01B2E",
@@ -1072,10 +1074,10 @@ if all(x.empty for x in (socio, carac, sites_agro, tri_agro)):
 cible_totale = CIBLE_TOTALE
 c1, c2, c3, c4 = st.columns(4)
 part = len(socio) / cible_totale * 100 if cible_totale else 0
-fiche(c1, "Ménages à équiper en sacs", f"{cible_totale}",
+fiche(c1, "Objectif de sacs", f"{cible_totale}",
       f"{CIBLE_MENAGES} par commune sur {len(COMMUNES_SOURCE)} communes à la source",
       "neutre")
-fiche(c2, "Fiches ménage reçues", f"{len(socio)}", f"{part:.0f} % de la cible",
+fiche(c2, "Fiches ménage reçues", f"{len(socio)}", f"{part:.0f} % de l'objectif",
       "normal" if part >= 50 else "veille")
 fiche(c3, "Échantillons triés", f"{len(carac)}", "questionnaire de caractérisation")
 nb_com = socio["commune"].nunique() if not socio.empty else 0
@@ -1095,31 +1097,31 @@ with onglets[0]:
         cible = cible_commune(commune)
         lignes.append({"Commune": commune, "Région": info["region"],
                        "Infrastructure": info["infra"], "Méthode": info["methode"],
-                       "Cible sacs": cible, "Fiches reçues": recu,
-                       "Reste à faire": max(cible - recu, 0),
-                       "Avancement": (recu / cible) if cible else None,
+                       "Objectif sacs": cible, "Fiches reçues": recu,
+                       "Marge restante": max(cible - recu, 0),
+                       "Avancement": (recu / cible * 100) if cible else None,
                        "Échantillons triés": trie})
     suivi = pd.DataFrame(lignes)
-    tot_cible = suivi["Cible sacs"].sum()
-    tot_recu = suivi.loc[suivi["Cible sacs"] > 0, "Fiches reçues"].sum()
+    tot_cible = suivi["Objectif sacs"].sum()
+    tot_recu = suivi.loc[suivi["Objectif sacs"] > 0, "Fiches reçues"].sum()
 
     a, b, c, d = st.columns(4)
     pc = tot_recu / tot_cible * 100 if tot_cible else 0
-    fiche(a, "Cible totale", f"{tot_cible}", "sacs à distribuer", "neutre")
-    fiche(b, "Reçu", f"{tot_recu}", f"{pc:.0f} % de la cible",
+    fiche(a, "Objectif total", f"{tot_cible}", "sacs au maximum", "neutre")
+    fiche(b, "Reçu", f"{tot_recu}", f"{pc:.0f} % de l'objectif",
           "normal" if pc >= 50 else "veille")
-    fiche(c, "Reste à faire", f"{max(tot_cible - tot_recu, 0)}", "sacs",
+    fiche(c, "Marge restante", f"{max(tot_cible - tot_recu, 0)}", "sacs possibles",
           "veille" if tot_cible - tot_recu > 0 else "normal")
-    finies = int((suivi["Avancement"] >= 1).sum())
-    fiche(d, "Communes à 100 %", f"{finies} / {len(COMMUNES_SOURCE)}",
-          "cible atteinte", "normal" if finies else "neutre")
+    finies = int((suivi["Avancement"] >= 100).sum())
+    fiche(d, "Communes au maximum", f"{finies} / {len(COMMUNES_SOURCE)}",
+          "objectif atteint", "normal" if finies else "neutre")
     st.write("")
 
     try:
         import plotly.graph_objects as go
-        src = suivi[suivi["Cible sacs"] > 0].sort_values("Avancement")
+        src = suivi[suivi["Objectif sacs"] > 0].sort_values("Avancement")
         fig = go.Figure()
-        fig.add_bar(y=src["Commune"], x=src["Cible sacs"], orientation="h",
+        fig.add_bar(y=src["Commune"], x=src["Objectif sacs"], orientation="h",
                     marker_color="#DCDCD4", hoverinfo="skip")
         fig.add_bar(y=src["Commune"], x=src["Fiches reçues"], orientation="h",
                     marker_color=[COULEURS[m] for m in src["Méthode"]],
@@ -1135,11 +1137,13 @@ with onglets[0]:
 
     st.dataframe(suivi, hide_index=True, width="stretch",
                  column_config={"Avancement": st.column_config.ProgressColumn(
-                     "Avancement", format="%.0f %%", min_value=0, max_value=1)})
+                     "Avancement", format="%.0f %%", min_value=0, max_value=100)})
     st.caption(
-        "Dagana, Bokhol et Ndioum sont en prélèvement sur points de collecte, sans "
-        "cible en sacs. Ranérou est en MODECOM à la source, régime allégé, avec une "
-        f"cible réduite à {CIBLES_PARTICULIERES['Ranérou']} ménages.")
+        f"L'objectif de {CIBLE_MENAGES} sacs par commune est un plafond, pas un quota : "
+        "le terrain peut en remonter moins selon les refus et les sacs non récupérés. "
+        "Ranérou est en régime allégé, plafond "
+        f"{CIBLES_PARTICULIERES['Ranérou']}. Dagana et Bokhol sont en prélèvement sur "
+        "points de collecte, sans sacs. Ndioum combine les deux dispositifs.")
     st.download_button("Télécharger le tableau de suivi",
                        suivi.to_csv(index=False).encode("utf-8"),
                        "suivi_avancement.csv", "text/csv")
