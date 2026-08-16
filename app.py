@@ -1139,9 +1139,9 @@ with onglets[0]:
                  column_config={"Avancement": st.column_config.ProgressColumn(
                      "Avancement", format="%.0f %%", min_value=0, max_value=100)})
     st.caption(
-        f"L'objectif de {CIBLE_MENAGES} sacs par commune est un plafond, pas un quota : "
-        "le terrain peut en remonter moins selon les refus et les sacs non récupérés. "
-        "Ranérou est en régime allégé, plafond "
+        f"{CIBLE_MENAGES} sacs par commune est un maximum, pas un quota à atteindre. "
+        "Un effectif de 60 ou moins reste conforme : il traduit la réalité du terrain "
+        "et non un incident de collecte. Ranérou est en régime allégé, maximum "
         f"{CIBLES_PARTICULIERES['Ranérou']}. Dagana et Bokhol sont en prélèvement sur "
         "points de collecte, sans sacs. Ndioum combine les deux dispositifs.")
     st.download_button("Télécharger le tableau de suivi",
