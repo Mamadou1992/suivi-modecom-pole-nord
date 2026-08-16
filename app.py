@@ -64,6 +64,8 @@ CATEGORIES_AGRO = {
 CV_HYPOTHESE = 0.40
 MARGE_CIBLE = 0.10
 CIBLE_MENAGES = 62
+# Cibles particulieres : Ranerou est en regime allege
+CIBLES_PARTICULIERES = {"Ranérou": 30}
 
 COMMUNES = {
     "Dagana":       {"infra": "CTT Dagana",  "region": "Saint-Louis", "methode": "Sur sites de collecte"},
@@ -77,13 +79,24 @@ COMMUNES = {
     "Matam":        {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM à la source"},
     "Ourossogui":   {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM à la source"},
     "Bokidiawé":    {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM adapté agro-pastoral"},
-    "Ranérou":      {"infra": "CET Ranérou", "region": "Matam",       "methode": "Sur sites régime allégé"},
+    "Ranérou":      {"infra": "CET Ranérou", "region": "Matam",       "methode": "MODECOM à la source, régime allégé"},
 }
 COMMUNES_SOURCE = [c for c, v in COMMUNES.items() if v["methode"].startswith("MODECOM")]
 COMMUNES_SITE = [c for c, v in COMMUNES.items() if not v["methode"].startswith("MODECOM")]
 
+
+def cible_commune(commune):
+    """Nombre de menages a equiper en sacs, 0 si prelevement sur points de collecte."""
+    if commune not in COMMUNES_SOURCE:
+        return 0
+    return CIBLES_PARTICULIERES.get(commune, CIBLE_MENAGES)
+
+
+CIBLE_TOTALE = sum(cible_commune(c) for c in COMMUNES)
+
 COULEURS = {
     "MODECOM à la source": "#1B7F4B",
+    "MODECOM à la source, régime allégé": "#4FB477",
     "MODECOM adapté agro-pastoral": "#8DC63F",
     "Sur sites de collecte": "#F4A93B",
     "Sur sites régime allégé": "#B01B2E",
@@ -1056,7 +1069,7 @@ if all(x.empty for x in (socio, carac, sites_agro, tri_agro)):
     st.sidebar.info("Aucune soumission sur Kobo pour l'instant.")
 
 # --- indicateurs generaux
-cible_totale = CIBLE_MENAGES * len(COMMUNES_SOURCE)
+cible_totale = CIBLE_TOTALE
 c1, c2, c3, c4 = st.columns(4)
 part = len(socio) / cible_totale * 100 if cible_totale else 0
 fiche(c1, "Ménages à équiper en sacs", f"{cible_totale}",
@@ -1079,7 +1092,7 @@ with onglets[0]:
     for commune, info in COMMUNES.items():
         recu = int((socio["commune"] == commune).sum()) if not socio.empty else 0
         trie = int((carac["commune"] == commune).sum()) if not carac.empty else 0
-        cible = CIBLE_MENAGES if commune in COMMUNES_SOURCE else 0
+        cible = cible_commune(commune)
         lignes.append({"Commune": commune, "Région": info["region"],
                        "Infrastructure": info["infra"], "Méthode": info["methode"],
                        "Cible sacs": cible, "Fiches reçues": recu,
@@ -1123,8 +1136,10 @@ with onglets[0]:
     st.dataframe(suivi, hide_index=True, width="stretch",
                  column_config={"Avancement": st.column_config.ProgressColumn(
                      "Avancement", format="%.0f %%", min_value=0, max_value=1)})
-    st.caption("Les quatre communes en prélèvement sur points de collecte, Dagana, "
-               "Bokhol, Ndioum et Ranérou, n'ont pas de cible en sacs.")
+    st.caption(
+        "Dagana, Bokhol et Ndioum sont en prélèvement sur points de collecte, sans "
+        "cible en sacs. Ranérou est en MODECOM à la source, régime allégé, avec une "
+        f"cible réduite à {CIBLES_PARTICULIERES['Ranérou']} ménages.")
     st.download_button("Télécharger le tableau de suivi",
                        suivi.to_csv(index=False).encode("utf-8"),
                        "suivi_avancement.csv", "text/csv")
@@ -1169,8 +1184,7 @@ with onglets[1]:
             communes_geo, sites = charger_couches(str(p_gpkg))
             recus = socio.groupby("commune").size() if not socio.empty else pd.Series(dtype=int)
             communes_geo["recus"] = communes_geo["commune"].map(recus).fillna(0).astype(int)
-            communes_geo["cible"] = communes_geo["commune"].apply(
-                lambda c: CIBLE_MENAGES if c in COMMUNES_SOURCE else 0)
+            communes_geo["cible"] = communes_geo["commune"].apply(cible_commune)
             communes_geo["avancement"] = [
                 round(r / c * 100) if c else None
                 for r, c in zip(communes_geo["recus"], communes_geo["cible"])]
