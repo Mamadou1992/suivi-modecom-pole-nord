@@ -80,9 +80,10 @@ COMMUNES = {
     "Ndioum":       {"infra": "CIVD Ndioum", "region": "Saint-Louis", "methode": "MODECOM à la source et sur sites"},
     "Podor":        {"infra": "CIVD Ndioum", "region": "Saint-Louis", "methode": "MODECOM à la source"},
     "Golléré":      {"infra": "CIVD Ndioum", "region": "Saint-Louis", "methode": "MODECOM à la source"},
-    "Ogo":          {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM adapté agro-pastoral"},
-    "Matam":        {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM à la source"},
-    "Ourossogui":   {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM à la source"},
+    "Ogo":          {"infra": "CIVD Ogo",    "region": "Matam",
+                     "methode": "MODECOM adapté agro-pastoral et sur sites"},
+    "Matam":        {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM à la source et sur sites"},
+    "Ourossogui":   {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM à la source et sur sites"},
     "Bokidiawé":    {"infra": "CIVD Ogo",    "region": "Matam",       "methode": "MODECOM adapté agro-pastoral"},
     "Ranérou":      {"infra": "CET Ranérou", "region": "Matam",       "methode": "MODECOM à la source, régime allégé"},
 }
@@ -104,9 +105,11 @@ CIBLE_TOTALE = sum(cible_commune(c) for c in COMMUNES)
 # dans l'ordre ou elle apparait.
 LIBELLES_COURTS = {
     "MODECOM à la source": "À la source",
-    "MODECOM à la source et sur sites": "À la source et sur sites",
+    "MODECOM à la source et sur sites": "À la source et sur site de collecte",
     "MODECOM à la source, régime allégé": "À la source, régime allégé",
     "MODECOM adapté agro-pastoral": "Adapté agro-pastoral",
+    "MODECOM adapté agro-pastoral et sur sites":
+        "Agro-pastoral et site de collecte",
     "Sur sites de collecte": "Sur site de collecte (décharge)",
 }
 
@@ -119,6 +122,7 @@ COULEURS = {
     "MODECOM à la source, régime allégé": "#4FB477",
     "MODECOM à la source et sur sites": "#2E9B6B",
     "MODECOM adapté agro-pastoral": "#8DC63F",
+    "MODECOM adapté agro-pastoral et sur sites": "#6FA32F",
     "Sur sites de collecte": "#F4A93B",
     "Sur sites régime allégé": "#B01B2E",
 }
