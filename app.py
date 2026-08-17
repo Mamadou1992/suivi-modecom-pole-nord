@@ -1126,7 +1126,7 @@ if not photos.empty:
 st.write("")
 
 onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
-                   "Composition", "Agro-pastoral", "Questionnaires"])
+                   "Composition", "Agro-pastoral", "Photos", "Questionnaires"])
 
 # ---------------------------------------------------------------- AVANCEMENT
 with onglets[0]:
@@ -1334,23 +1334,6 @@ with onglets[1]:
                          hide_index=True, width="stretch")
         except Exception as e:
             st.error(f"Rendu de la carte impossible : {e}")
-
-
-    rubrique("Reportage photo")
-    if photos.empty:
-        st.info("Aucune photo reçue. Le formulaire *Photo caractérisation* "
-                "alimente cette galerie dès la première soumission.")
-    else:
-        dispo = [c for c in COMMUNES if nb_photos_commune(photos, c)]
-        choix = st.multiselect("Communes", dispo, default=dispo,
-                               key="filtre_photos")
-        sel = photos[photos["commune"].isin(choix)] if choix else photos.iloc[0:0]
-        if sel.empty:
-            st.caption("Choisir au moins une commune.")
-        else:
-            galerie(sel, token, titre="", colonnes=4, limite=32)
-    st.caption("Ce formulaire ne relève pas de coordonnées GPS : les photos sont "
-               "rattachées à une commune, pas à un point de la carte.")
 
 
 # ---------------------------------------------------------------- THEMATIQUE
@@ -1656,6 +1639,30 @@ with onglets[5]:
 
 # ---------------------------------------------------------------- QUESTIONNAIRES
 with onglets[6]:
+    rubrique("Reportage photo de terrain")
+    if photos.empty:
+        st.info("Aucune photo reçue. Le formulaire *Photo caractérisation* "
+                "alimente cette galerie dès la première soumission.")
+    else:
+        a, b = st.columns(2)
+        fiche(a, "Soumissions", f"{len(photos)}", "fiches photo", "neutre")
+        fiche(b, "Communes documentées", f"{photos['commune'].nunique()} / "
+              f"{len(COMMUNES)}", "au moins une photo", "normal")
+        dispo = [c for c in COMMUNES if nb_photos_commune(photos, c)]
+        choix = st.multiselect("Communes", dispo, default=dispo,
+                               key="filtre_photos")
+        sel = photos[photos["commune"].isin(choix)] if choix else photos.iloc[0:0]
+        if sel.empty:
+            st.caption("Choisir au moins une commune.")
+        else:
+            galerie(sel, token, titre="", colonnes=4, limite=32)
+    st.caption("Ce formulaire ne relève pas de coordonnées GPS : les photos sont "
+               "rattachées à une commune, pas à un point de la carte. Les images "
+               "restent hébergées sur Kobo.")
+
+
+# ------------------------------------------------------------- QUESTIONNAIRES
+with onglets[7]:
     if all(f is None for f in (f_socio, f_carac, f_sites_agro, f_tri_agro)):
         attente("Les deux questionnaires XLSForm ne sont pas dans le dépôt.")
     else:
