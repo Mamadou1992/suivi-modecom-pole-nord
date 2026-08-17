@@ -29,6 +29,7 @@ FORM_CARAC = "Questionnaire caractérisation MODECOM.xlsx"
 FORM_CARAC_ANCIEN = "Caractérisation des déchets MODECOM_v2.xlsx"
 FORM_SITES_AGRO = "Identification et cartographie des sites — Agro-pastoral (Pôle Nord).xlsx"
 FORM_TRI_AGRO = "Caractérisation agro-pastorale (A1–A6) — MODECOM Pôle Nord.xlsx"
+FORM_PHOTOS = "Photo caractérisation.xlsx"
 FICHIER_GPKG = "Caracterisation_communes.gpkg"
 
 KOBO_URL = "https://kf.kobotoolbox.org"
@@ -37,6 +38,7 @@ KOBO_URL = "https://kf.kobotoolbox.org"
 # ceux qui ne le sont pas sont reconnus a leur contenu.
 ROLE_MENAGES, ROLE_TRI = "menages", "tri"
 ROLE_SITES_AGRO, ROLE_TRI_AGRO = "sites_agro", "tri_agro"
+ROLE_PHOTOS = "photos"
 
 UID_ROLES = {
     "aRuKgN8hXyDTyLRbSTLdNH": ROLE_MENAGES,      # enquête ménage, version en service
@@ -45,6 +47,7 @@ UID_ROLES = {
     "avQNVABnKjUArYNJj8RDxd": ROLE_TRI,          # caractérisation MODECOM, à jour
     "aSnArkcnDbH4pDqq9uDFTy": ROLE_SITES_AGRO,   # identification des sites agro-pastoraux
     "aCvQFPEqY9sPUGjXFLPh6q": ROLE_TRI_AGRO,     # caractérisation agro-pastorale A1-A6
+    "aabjLvJkGkwgDA3gaUzJtj": ROLE_PHOTOS,       # reportage photo par commune
 }
 UIDS_DEFAUT = list(UID_ROLES)
 
@@ -53,6 +56,7 @@ FORMULAIRES = {
     ROLE_TRI:        {"titre": "Caractérisation des déchets", "fichier": FORM_CARAC},
     ROLE_SITES_AGRO: {"titre": "Sites agro-pastoraux", "fichier": FORM_SITES_AGRO},
     ROLE_TRI_AGRO:   {"titre": "Caractérisation agro-pastorale", "fichier": FORM_TRI_AGRO},
+    ROLE_PHOTOS:     {"titre": "Reportage photo", "fichier": FORM_PHOTOS},
 }
 
 CATEGORIES_AGRO = {
@@ -464,6 +468,10 @@ SIGNES = {
                "nombre_sachets_distribues", "mode_caracterisation"},
     ROLE_SITES_AGRO: {"categories_presentes", "accessibilite", "type_activite", "site"},
     ROLE_TRI_AGRO: {"masse_a1", "masse_a3", "te_a1", "momov_a1", "categorie"},
+    ROLE_PHOTOS: {"Point_and_shoot_Use_mera_to_take_a_photo",
+                  "Point_and_shoot_Use_mera_to_take_a_photo_001",
+                  "Point_and_shoot_Use_mera_to_take_a_photo_002",
+                  "Point_and_shoot_Use_mera_to_take_a_photo_003"},
 }
 
 
@@ -662,6 +670,33 @@ COLS_TRI_AGRO = {
 }
 
 
+COLS_PHOTOS = {
+    "date": ["_submission_time", "start"], "commune": ["Commune", "commune"],
+}
+
+
+def normalise_photos(df):
+    """Reportage photo : une soumission, une commune, jusqu'a quatre images."""
+    if df is None or getattr(df, "empty", True):
+        return pd.DataFrame()
+    df = df.copy()
+    df.columns = [str(c).split("/")[-1] for c in df.columns]
+    df = _renomme(df, COLS_PHOTOS)
+    if "commune" in df:
+        df["commune"] = df["commune"].map(rapproche_commune)
+    if "date" in df:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df = df.sort_values("date", ascending=False)
+    return df
+
+
+def nb_photos_commune(df, commune):
+    """Nombre d'images du reportage photo rattachees a une commune."""
+    if df is None or getattr(df, "empty", True) or "commune" not in df:
+        return 0
+    return len(liens_photos(df[df["commune"] == commune], limite=10_000))
+
+
 def _coordonnees(df, colonne="gps"):
     """Extrait latitude et longitude d'un champ geopoint de Kobo."""
     if colonne not in df:
@@ -756,7 +791,8 @@ def galerie(df, token, titre="Photos", colonnes=4, limite=24):
     liens = liens_photos(df, limite)
     if not liens:
         return
-    rubrique(titre)
+    if titre:
+        rubrique(titre)
     cols = st.columns(colonnes)
     affichees = 0
     for i, (url, legende) in enumerate(liens):
@@ -1054,6 +1090,7 @@ socio = normalise_socio(jeux.get(ROLE_MENAGES))
 carac = normalise_carac(jeux.get(ROLE_TRI))
 sites_agro = normalise_sites_agro(jeux.get(ROLE_SITES_AGRO))
 tri_agro = normalise_tri_agro(jeux.get(ROLE_TRI_AGRO))
+photos = normalise_photos(jeux.get(ROLE_PHOTOS))
 
 if derniere is not None:
     age = int((pd.Timestamp.now() - derniere).total_seconds())
@@ -1083,6 +1120,9 @@ fiche(c3, "Échantillons triés", f"{len(carac)}", "questionnaire de caractéris
 nb_com = socio["commune"].nunique() if not socio.empty else 0
 fiche(c4, "Communes couvertes", f"{nb_com} / {len(COMMUNES)}",
       "au moins une fiche reçue", "normal" if nb_com else "neutre")
+if not photos.empty:
+    st.caption(f"Reportage photo : {len(photos)} soumissions sur "
+               f"{photos['commune'].nunique()} communes.")
 st.write("")
 
 onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
@@ -1100,7 +1140,8 @@ with onglets[0]:
                        "Objectif sacs": cible, "Fiches reçues": recu,
                        "Marge restante": max(cible - recu, 0),
                        "Avancement": (recu / cible * 100) if cible else None,
-                       "Échantillons triés": trie})
+                       "Échantillons triés": trie,
+                       "Photos": nb_photos_commune(photos, commune)})
     suivi = pd.DataFrame(lignes)
     tot_cible = suivi["Objectif sacs"].sum()
     tot_recu = suivi.loc[suivi["Objectif sacs"] > 0, "Fiches reçues"].sum()
@@ -1293,6 +1334,23 @@ with onglets[1]:
                          hide_index=True, width="stretch")
         except Exception as e:
             st.error(f"Rendu de la carte impossible : {e}")
+
+
+    rubrique("Reportage photo")
+    if photos.empty:
+        st.info("Aucune photo reçue. Le formulaire *Photo caractérisation* "
+                "alimente cette galerie dès la première soumission.")
+    else:
+        dispo = [c for c in COMMUNES if nb_photos_commune(photos, c)]
+        choix = st.multiselect("Communes", dispo, default=dispo,
+                               key="filtre_photos")
+        sel = photos[photos["commune"].isin(choix)] if choix else photos.iloc[0:0]
+        if sel.empty:
+            st.caption("Choisir au moins une commune.")
+        else:
+            galerie(sel, token, titre="", colonnes=4, limite=32)
+    st.caption("Ce formulaire ne relève pas de coordonnées GPS : les photos sont "
+               "rattachées à une commune, pas à un point de la carte.")
 
 
 # ---------------------------------------------------------------- THEMATIQUE
