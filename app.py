@@ -99,6 +99,30 @@ def cible_commune(commune):
 
 CIBLE_TOTALE = sum(cible_commune(c) for c in COMMUNES)
 
+# Typologies de caracterisation, dans l'ordre d'affichage. Chaque commune
+# n'appartient qu'a une seule typologie ; la couverture se juge typologie
+# par typologie, car les dispositifs ne produisent pas les memes fiches.
+TYPOLOGIES = {
+    "À la source": ["MODECOM à la source", "MODECOM à la source, régime allégé",
+                    "MODECOM à la source et sur sites"],
+    "Agro-pastoral": ["MODECOM adapté agro-pastoral"],
+    "Sur points de collecte": ["Sur sites de collecte"],
+}
+
+
+def typologie(commune):
+    """Famille de methodes a laquelle appartient une commune."""
+    m = COMMUNES[commune]["methode"]
+    for nom, methodes in TYPOLOGIES.items():
+        if m in methodes:
+            return nom
+    return "Autre"
+
+
+COMMUNES_PAR_TYPO = {
+    nom: [c for c in COMMUNES if typologie(c) == nom] for nom in TYPOLOGIES
+}
+
 COULEURS = {
     "MODECOM à la source": "#1B7F4B",
     "MODECOM à la source, régime allégé": "#4FB477",
@@ -1117,9 +1141,19 @@ fiche(c1, "Objectif de sacs", f"{cible_totale}",
 fiche(c2, "Fiches ménage reçues", f"{len(socio)}", f"{part:.0f} % de l'objectif",
       "normal" if part >= 50 else "veille")
 fiche(c3, "Échantillons triés", f"{len(carac)}", "questionnaire de caractérisation")
-nb_com = socio["commune"].nunique() if not socio.empty else 0
+vues = set(socio["commune"].dropna()) if not socio.empty else set()
+vues |= set(carac["commune"].dropna()) if not carac.empty else set()
+nb_com = len(vues & set(COMMUNES))
 fiche(c4, "Communes couvertes", f"{nb_com} / {len(COMMUNES)}",
-      "au moins une fiche reçue", "normal" if nb_com else "neutre")
+      "au moins une fiche ménage ou de tri", "normal" if nb_com else "neutre")
+
+t1, t2, t3 = st.columns(3)
+for col, (nom, liste) in zip((t1, t2, t3), COMMUNES_PAR_TYPO.items()):
+    couvertes = len([c for c in liste if c in vues])
+    part_t = couvertes / len(liste) * 100 if liste else 0
+    fiche(col, nom, f"{couvertes} / {len(liste)}",
+          f"{part_t:.0f} % des communes de cette typologie",
+          "normal" if part_t >= 50 else ("veille" if couvertes else "neutre"))
 if not photos.empty:
     st.caption(f"Reportage photo : {len(photos)} soumissions sur "
                f"{photos['commune'].nunique()} communes.")
