@@ -91,7 +91,7 @@ COMMUNES_SITE = [c for c, v in COMMUNES.items() if not v["methode"].startswith("
 
 
 def cible_commune(commune):
-    """Nombre de menages a equiper en sacs, 0 si prelevement sur points de collecte."""
+    """Nombre de menages a equiper en sacs, 0 si prelevement sur site de collecte."""
     if commune not in COMMUNES_SOURCE:
         return 0
     return CIBLES_PARTICULIERES.get(commune, CIBLE_MENAGES)
@@ -99,29 +99,20 @@ def cible_commune(commune):
 
 CIBLE_TOTALE = sum(cible_commune(c) for c in COMMUNES)
 
-# Typologies de caracterisation, dans l'ordre d'affichage. Chaque commune
-# n'appartient qu'a une seule typologie ; la couverture se juge typologie
-# par typologie, car les dispositifs ne produisent pas les memes fiches.
-TYPOLOGIES = {
-    "À la source": ["MODECOM à la source", "MODECOM à la source, régime allégé",
-                    "MODECOM à la source et sur sites"],
-    "Agro-pastoral": ["MODECOM adapté agro-pastoral"],
-    "Sur points de collecte": ["Sur sites de collecte"],
+# Regroupement des communes sur la methode declaree, sans famille
+# intermediaire : chaque methode du dictionnaire COMMUNES forme un groupe,
+# dans l'ordre ou elle apparait.
+LIBELLES_COURTS = {
+    "MODECOM à la source": "À la source",
+    "MODECOM à la source et sur sites": "À la source et sur sites",
+    "MODECOM à la source, régime allégé": "À la source, régime allégé",
+    "MODECOM adapté agro-pastoral": "Adapté agro-pastoral",
+    "Sur sites de collecte": "Sur site de collecte (décharge)",
 }
 
-
-def typologie(commune):
-    """Famille de methodes a laquelle appartient une commune."""
-    m = COMMUNES[commune]["methode"]
-    for nom, methodes in TYPOLOGIES.items():
-        if m in methodes:
-            return nom
-    return "Autre"
-
-
-COMMUNES_PAR_TYPO = {
-    nom: [c for c in COMMUNES if typologie(c) == nom] for nom in TYPOLOGIES
-}
+COMMUNES_PAR_METHODE = {}
+for _c, _v in COMMUNES.items():
+    COMMUNES_PAR_METHODE.setdefault(_v["methode"], []).append(_c)
 
 COULEURS = {
     "MODECOM à la source": "#1B7F4B",
@@ -867,7 +858,7 @@ def controler_socio(df):
                 lambda r: f"Commune non reconnue : {r['commune']}")
         _ajoute(a, "À vérifier", Q, "Commune sans dépôt de sacs",
                 df[df["commune"].isin(COMMUNES_SITE)], "menage_id",
-                lambda r: f"{r['commune']} est en prélèvement sur points de collecte")
+                lambda r: f"{r['commune']} est en prélèvement sur site de collecte")
     return pd.DataFrame(a)
 
 
@@ -1147,13 +1138,18 @@ nb_com = len(vues & set(COMMUNES))
 fiche(c4, "Communes couvertes", f"{nb_com} / {len(COMMUNES)}",
       "au moins une fiche ménage ou de tri", "normal" if nb_com else "neutre")
 
-t1, t2, t3 = st.columns(3)
-for col, (nom, liste) in zip((t1, t2, t3), COMMUNES_PAR_TYPO.items()):
-    couvertes = len([c for c in liste if c in vues])
-    part_t = couvertes / len(liste) * 100 if liste else 0
-    fiche(col, nom, f"{couvertes} / {len(liste)}",
-          f"{part_t:.0f} % des communes de cette typologie",
-          "normal" if part_t >= 50 else ("veille" if couvertes else "neutre"))
+st.write("")
+st.caption("Couverture par méthode de caractérisation")
+groupes = list(COMMUNES_PAR_METHODE.items())
+for depart in range(0, len(groupes), 3):
+    cols = st.columns(3)
+    for col, (methode, liste) in zip(cols, groupes[depart:depart + 3]):
+        couvertes = [c for c in liste if c in vues]
+        part_m = len(couvertes) / len(liste) * 100 if liste else 0
+        fiche(col, LIBELLES_COURTS.get(methode, methode),
+              f"{len(couvertes)} / {len(liste)}",
+              ", ".join(liste),
+              "normal" if part_m >= 50 else ("veille" if couvertes else "neutre"))
 if not photos.empty:
     st.caption(f"Reportage photo : {len(photos)} soumissions sur "
                f"{photos['commune'].nunique()} communes.")
@@ -1218,7 +1214,8 @@ with onglets[0]:
         "Un effectif de 60 ou moins reste conforme : il traduit la réalité du terrain "
         "et non un incident de collecte. Ranérou est en régime allégé, maximum "
         f"{CIBLES_PARTICULIERES['Ranérou']}. Dagana et Bokhol sont en prélèvement sur "
-        "points de collecte, sans sacs. Ndioum combine les deux dispositifs.")
+        "site de collecte, la décharge, sans sacs. Ndioum combine les deux "
+        "dispositifs.")
     st.download_button("Télécharger le tableau de suivi",
                        suivi.to_csv(index=False).encode("utf-8"),
                        "suivi_avancement.csv", "text/csv")
