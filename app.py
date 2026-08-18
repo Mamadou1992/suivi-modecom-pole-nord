@@ -1194,7 +1194,7 @@ if all(x.empty for x in (socio, carac, sites_agro, tri_agro)):
 cible_totale = CIBLE_TOTALE
 c1, c2, c3, c4 = st.columns(4)
 part = len(socio) / cible_totale * 100 if cible_totale else 0
-fiche(c1, "Nombre de sacs à distribuer", f"{cible_totale}",
+fiche(c1, "Objectif de sacs à distribuer", f"{cible_totale}",
       f"{CIBLE_MENAGES} par commune sur {len(COMMUNES_SOURCE)} communes à la source",
       "neutre")
 fiche(c2, "Fiches ménage reçues", f"{len(socio)}", f"{part:.0f} % de l'objectif",
@@ -1205,19 +1205,6 @@ vues |= set(carac["commune"].dropna()) if not carac.empty else set()
 nb_com = len(vues & set(COMMUNES))
 fiche(c4, "Communes couvertes", f"{nb_com} / {len(COMMUNES)}",
       "au moins une fiche ménage ou de tri", "normal" if nb_com else "neutre")
-
-st.write("")
-st.caption("Couverture par méthode de caractérisation")
-groupes = list(COMMUNES_PAR_METHODE.items())
-for depart in range(0, len(groupes), 3):
-    cols = st.columns(3)
-    for col, (methode, liste) in zip(cols, groupes[depart:depart + 3]):
-        couvertes = [c for c in liste if c in vues]
-        part_m = len(couvertes) / len(liste) * 100 if liste else 0
-        fiche(col, LIBELLES_COURTS.get(methode, methode),
-              f"{len(couvertes)} / {len(liste)}",
-              ", ".join(liste),
-              "normal" if part_m >= 50 else ("veille" if couvertes else "neutre"))
 st.write("")
 
 onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
