@@ -1194,7 +1194,7 @@ if all(x.empty for x in (socio, carac, sites_agro, tri_agro)):
 cible_totale = CIBLE_TOTALE
 c1, c2, c3, c4 = st.columns(4)
 part = len(socio) / cible_totale * 100 if cible_totale else 0
-fiche(c1, "Objectif de sacs", f"{cible_totale}",
+fiche(c1, "Nombre de sacs à distribuer", f"{cible_totale}",
       f"{CIBLE_MENAGES} par commune sur {len(COMMUNES_SOURCE)} communes à la source",
       "neutre")
 fiche(c2, "Fiches ménage reçues", f"{len(socio)}", f"{part:.0f} % de l'objectif",
