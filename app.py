@@ -1227,16 +1227,13 @@ with onglets[0]:
     tot_cible = suivi["Objectif sacs"].sum()
     tot_recu = suivi.loc[suivi["Objectif sacs"] > 0, "Fiches reçues"].sum()
 
-    a, b, c, d = st.columns(4)
+    a, b, c = st.columns(3)
     pc = tot_recu / tot_cible * 100 if tot_cible else 0
     fiche(a, "Objectif total", f"{tot_cible}", "sacs au maximum", "neutre")
     fiche(b, "Reçu", f"{tot_recu}", f"{pc:.0f} % de l'objectif",
           "normal" if pc >= 50 else "veille")
     fiche(c, "Marge restante", f"{max(tot_cible - tot_recu, 0)}", "sacs possibles",
           "veille" if tot_cible - tot_recu > 0 else "normal")
-    finies = int((suivi["Avancement"] >= 100).sum())
-    fiche(d, "Communes au maximum", f"{finies} / {len(COMMUNES_SOURCE)}",
-          "objectif atteint", "normal" if finies else "neutre")
     st.write("")
 
     try:
