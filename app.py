@@ -709,11 +709,11 @@ def normalise_photos(df):
     return df
 
 
-def nb_photos_commune(df, commune):
-    """Nombre d'images du reportage photo rattachees a une commune."""
-    if df is None or getattr(df, "empty", True) or "commune" not in df:
+def nb_photos_commune(t, commune):
+    """Nombre d'images rattachees a une commune, tous formulaires confondus."""
+    if t is None or getattr(t, "empty", True) or "commune" not in t:
         return 0
-    return len(liens_photos(df[df["commune"] == commune], limite=10_000))
+    return int((t["commune"] == commune).sum())
 
 
 def _coordonnees(df, colonne="gps"):
@@ -778,6 +778,61 @@ def telecharger_image(url, token):
 
 
 CLES_LEGENDE = ["commune", "site", "menage_id", "code_echantillon", "quartier"]
+
+
+def table_photos(sources):
+    """Toutes les images jointes, quel que soit le formulaire d'origine.
+
+    `sources` associe un libelle a un jeu normalise. Une soumission peut
+    porter plusieurs images : chacune donne une ligne.
+    """
+    lignes = []
+    for libelle, df in sources.items():
+        if df is None or getattr(df, "empty", True):
+            continue
+        if "_attachments" not in df.columns:
+            continue
+        for _, r in df.iterrows():
+            jointes = r.get("_attachments")
+            if not isinstance(jointes, list):
+                continue
+            for a in jointes:
+                if not isinstance(a, dict):
+                    continue
+                if "image" not in str(a.get("mimetype", "")).lower():
+                    continue
+                url = a.get("download_small_url") or a.get("download_url")
+                if not url:
+                    continue
+                bouts = [str(r.get(c)) for c in CLES_LEGENDE
+                         if r.get(c) is not None and str(r.get(c)) not in ("nan", "")]
+                lignes.append({
+                    "url": url, "source": libelle,
+                    "commune": r.get("commune"), "date": r.get("date"),
+                    "legende": " · ".join(bouts) or "sans identifiant"})
+    t = pd.DataFrame(lignes)
+    if not t.empty:
+        t["date"] = pd.to_datetime(t.get("date"), errors="coerce")
+        t = t.sort_values("date", ascending=False, na_position="last")
+    return t
+
+
+def galerie_table(t, token, colonnes=4):
+    """Affiche une table d'images produite par table_photos."""
+    if t.empty:
+        return 0
+    cols = st.columns(colonnes)
+    affichees = 0
+    for i, (_, r) in enumerate(t.iterrows()):
+        cible = cols[i % colonnes]
+        legende = f"{r['commune'] or 'commune non renseignée'} · {r['source']}"
+        try:
+            cible.image(telecharger_image(r["url"], token), caption=legende,
+                        width="stretch")
+            affichees += 1
+        except Exception:
+            cible.caption(f"Image indisponible · {legende}")
+    return affichees
 
 
 def liens_photos(df, limite=24):
@@ -1111,6 +1166,15 @@ sites_agro = normalise_sites_agro(jeux.get(ROLE_SITES_AGRO))
 tri_agro = normalise_tri_agro(jeux.get(ROLE_TRI_AGRO))
 photos = normalise_photos(jeux.get(ROLE_PHOTOS))
 
+# Toutes les images, quel que soit le formulaire qui les porte.
+images = table_photos({
+    "Reportage photo": photos,
+    "Enquête ménage": socio,
+    "Caractérisation": carac,
+    "Sites agro-pastoraux": sites_agro,
+    "Tri agro-pastoral": tri_agro,
+})
+
 if derniere is not None:
     age = int((pd.Timestamp.now() - derniere).total_seconds())
     st.sidebar.success(
@@ -1154,9 +1218,6 @@ for depart in range(0, len(groupes), 3):
               f"{len(couvertes)} / {len(liste)}",
               ", ".join(liste),
               "normal" if part_m >= 50 else ("veille" if couvertes else "neutre"))
-if not photos.empty:
-    st.caption(f"Reportage photo : {len(photos)} soumissions sur "
-               f"{photos['commune'].nunique()} communes.")
 st.write("")
 
 onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
@@ -1174,8 +1235,7 @@ with onglets[0]:
                        "Objectif sacs": cible, "Fiches reçues": recu,
                        "Marge restante": max(cible - recu, 0),
                        "Avancement": (recu / cible * 100) if cible else None,
-                       "Échantillons triés": trie,
-                       "Photos": nb_photos_commune(photos, commune)})
+                       "Échantillons triés": trie})
     suivi = pd.DataFrame(lignes)
     tot_cible = suivi["Objectif sacs"].sum()
     tot_recu = suivi.loc[suivi["Objectif sacs"] > 0, "Fiches reçues"].sum()
@@ -1674,26 +1734,60 @@ with onglets[5]:
 
 # ---------------------------------------------------------------- QUESTIONNAIRES
 with onglets[6]:
-    rubrique("Reportage photo de terrain")
-    if photos.empty:
-        st.info("Aucune photo reçue. Le formulaire *Photo caractérisation* "
-                "alimente cette galerie dès la première soumission.")
+    rubrique("Photos de terrain")
+    if images.empty:
+        st.info("Aucune photo reçue. Les images apparaissent ici dès la première "
+                "soumission portant une pièce jointe, quel que soit le formulaire.")
     else:
-        a, b = st.columns(2)
-        fiche(a, "Soumissions", f"{len(photos)}", "fiches photo", "neutre")
-        fiche(b, "Communes documentées", f"{photos['commune'].nunique()} / "
-              f"{len(COMMUNES)}", "au moins une photo", "normal")
-        dispo = [c for c in COMMUNES if nb_photos_commune(photos, c)]
-        choix = st.multiselect("Communes", dispo, default=dispo,
+        a, b, c = st.columns(3)
+        fiche(a, "Photos reçues", f"{len(images)}", "toutes sources confondues",
+              "neutre")
+        vues_ph = images["commune"].dropna().nunique()
+        fiche(b, "Communes documentées", f"{vues_ph} / {len(COMMUNES)}",
+              "au moins une photo", "normal" if vues_ph else "neutre")
+        fiche(c, "Formulaires porteurs", f"{images['source'].nunique()}",
+              "questionnaires avec images", "neutre")
+
+        st.write("")
+        f1, f2 = st.columns([3, 2])
+        dispo = [x for x in COMMUNES if nb_photos_commune(images, x)]
+        # Images dont la commune est vide ou hors des douze communes suivies.
+        autres = int((~images["commune"].isin(list(COMMUNES))).sum())
+        choix = f1.multiselect("Communes", dispo, default=dispo,
                                key="filtre_photos")
-        sel = photos[photos["commune"].isin(choix)] if choix else photos.iloc[0:0]
+        srcs = sorted(images["source"].unique())
+        choix_src = f2.multiselect("Formulaires", srcs, default=srcs,
+                                   key="filtre_photos_source")
+
+        sel = images[images["commune"].isin(choix) & images["source"].isin(choix_src)]
+        st.caption(f"{len(sel)} photos correspondent aux filtres, sur "
+                   f"{len(images)} reçues."
+                   + (f" {autres} photos sans commune reconnue ne sont pas "
+                      "affichées." if autres else ""))
         if sel.empty:
-            st.caption("Choisir au moins une commune.")
+            st.info("Aucune photo pour cette sélection.")
         else:
-            galerie(sel, token, titre="", colonnes=4, limite=32)
-    st.caption("Ce formulaire ne relève pas de coordonnées GPS : les photos sont "
-               "rattachées à une commune, pas à un point de la carte. Les images "
-               "restent hébergées sur Kobo.")
+            par_page = st.select_slider(
+                "Photos affichées", options=[12, 24, 48, 96, 200],
+                value=48 if len(sel) > 48 else 24, key="photos_par_page")
+            pages = max(1, -(-len(sel) // par_page))
+            page = 1
+            if pages > 1:
+                page = st.number_input("Page", 1, pages, 1, key="photos_page")
+            debut = (int(page) - 1) * par_page
+            n = galerie_table(sel.iloc[debut:debut + par_page], token)
+            st.caption(f"{n} photos affichées, page {int(page)} sur {pages}, "
+                       "les plus récentes d'abord. Les images restent hébergées "
+                       "sur Kobo, rien n'est copié ici.")
+
+        rubrique("Répartition par commune")
+        recap = (images.assign(commune=images["commune"].fillna("non renseignée"))
+                 .groupby(["commune", "source"]).size().unstack(fill_value=0))
+        recap["Total"] = recap.sum(axis=1)
+        st.dataframe(recap.sort_values("Total", ascending=False), width="stretch")
+    st.caption("Le formulaire *Photo caractérisation* ne relève pas de coordonnées "
+               "GPS : ses images sont rattachées à une commune, pas à un point de "
+               "la carte.")
 
 
 # ------------------------------------------------------------- QUESTIONNAIRES
