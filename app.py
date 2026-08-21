@@ -2017,19 +2017,6 @@ with onglets[6]:
             st.caption(f"{n} photos affichées, page {int(page)} sur {pages}, "
                        "les plus récentes d'abord. Les images restent hébergées "
                        "sur Kobo, rien n'est copié ici.")
-
-        rubrique("Répartition par commune")
-        recap = (images.assign(commune=images["commune"].fillna("non renseignée"))
-                 .groupby(["commune", "source"]).size().unstack(fill_value=0))
-        recap["Total"] = recap.sum(axis=1)
-        connues = [c for c in COMMUNES if c in recap.index]
-        inconnues = [c for c in recap.index if c not in COMMUNES]
-        recap = recap.reindex(connues + inconnues, fill_value=0)
-        st.dataframe(recap, width="stretch")
-        if inconnues:
-            st.warning("Valeurs de commune non reconnues : " + ", ".join(inconnues)
-                       + ". Elles proviennent d'un code de liste absent de la table "
-                       "de correspondance.")
     st.caption("Le formulaire *Photo caractérisation* ne relève pas de coordonnées "
                "GPS : ses images sont rattachées à une commune, pas à un point de "
                "la carte.")
