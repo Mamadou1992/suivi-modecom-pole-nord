@@ -72,8 +72,8 @@ CIBLES_PARTICULIERES = {"Ranérou": 30}
 
 COMMUNES = {
     "Dagana":       {"infra": "CTT Dagana",  "region": "Saint-Louis", "methode": "Sur sites de collecte"},
-    "Richard Toll": {"infra": "CTT Dagana",  "region": "Saint-Louis", "methode": "MODECOM à la source"},
-    "Bokhol":       {"infra": "CIVD Bokhol", "region": "Saint-Louis", "methode": "Sur sites de collecte"},
+    "Richard Toll": {"infra": "CTT Dagana",  "region": "Saint-Louis", "methode": "Sur sites de collecte"},
+    "Bokhol":       {"infra": "CIVD Bokhol", "region": "Saint-Louis", "methode": "MODECOM à la source"},
     "Fanaye":       {"infra": "CIVD Bokhol", "region": "Saint-Louis", "methode": "MODECOM à la source"},
     "Ndioum":       {"infra": "CIVD Ndioum", "region": "Saint-Louis", "methode": "MODECOM à la source et sur sites"},
     "Podor":        {"infra": "CIVD Ndioum", "region": "Saint-Louis", "methode": "MODECOM à la source"},
