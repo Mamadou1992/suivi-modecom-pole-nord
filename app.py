@@ -452,12 +452,48 @@ def sans_accent(s):
                    if not unicodedata.combining(c))
 
 
+# Codes de liste generes par Kobo. Ils varient d'un formulaire a l'autre :
+# le formulaire photo ecrit goll_r et bokidiaw, la fiche de caracterisation
+# ecrit gollere et bokidiawe. Tous doivent retomber sur le nom officiel.
+ALIAS_COMMUNES = {
+    "dagana": "Dagana",
+    "richard toll": "Richard Toll", "richardtoll": "Richard Toll",
+    "bokhol": "Bokhol",
+    "fanaye": "Fanaye",
+    "ndioum": "Ndioum",
+    "podor": "Podor",
+    "gollere": "Golléré", "goll r": "Golléré", "gollr": "Golléré",
+    "ogo": "Ogo",
+    "matam": "Matam", "matam commune": "Matam",
+    "ourossogui": "Ourossogui", "ouro sogui": "Ourossogui",
+    "bokidiawe": "Bokidiawé", "bokidiaw": "Bokidiawé",
+    "ranerou": "Ranérou", "ran rou": "Ranérou", "ranerou ferlo": "Ranérou",
+}
+
+
+def _cle_commune(v):
+    """Forme comparable d'un nom de commune : sans accent, sans ponctuation."""
+    x = sans_accent(v).strip().lower()
+    for c in ("_", "-", "'", "."):
+        x = x.replace(c, " ")
+    return " ".join(x.split())
+
+
 def rapproche_commune(v):
+    """Nom officiel d'une commune, a partir d'un libelle ou d'un code Kobo."""
     if pd.isna(v):
         return None
-    x = sans_accent(v).strip().lower().replace("_", " ").replace("-", " ")
+    x = _cle_commune(v)
+    if not x:
+        return None
     for off in COMMUNES:
-        if sans_accent(off).lower().replace("-", " ") == x:
+        if _cle_commune(off) == x:
+            return off
+    if x in ALIAS_COMMUNES:
+        return ALIAS_COMMUNES[x]
+    compact = x.replace(" ", "")
+    for off in COMMUNES:
+        if _cle_commune(off).replace(" ", "") == compact:
             return off
     return str(v).strip()
 
@@ -1986,7 +2022,14 @@ with onglets[6]:
         recap = (images.assign(commune=images["commune"].fillna("non renseignée"))
                  .groupby(["commune", "source"]).size().unstack(fill_value=0))
         recap["Total"] = recap.sum(axis=1)
-        st.dataframe(recap.sort_values("Total", ascending=False), width="stretch")
+        connues = [c for c in COMMUNES if c in recap.index]
+        inconnues = [c for c in recap.index if c not in COMMUNES]
+        recap = recap.reindex(connues + inconnues, fill_value=0)
+        st.dataframe(recap, width="stretch")
+        if inconnues:
+            st.warning("Valeurs de commune non reconnues : " + ", ".join(inconnues)
+                       + ". Elles proviennent d'un code de liste absent de la table "
+                       "de correspondance.")
     st.caption("Le formulaire *Photo caractérisation* ne relève pas de coordonnées "
                "GPS : ses images sont rattachées à une commune, pas à un point de "
                "la carte.")
