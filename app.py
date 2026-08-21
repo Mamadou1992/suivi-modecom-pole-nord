@@ -25,8 +25,7 @@ RACINE = Path(__file__).resolve().parent
 DOSSIERS_DONNEES = [RACINE / "donnees", RACINE]
 
 FORM_SOCIO = "Enquête ménage MODECOM Pôle Nord.xlsx"
-FORM_CARAC = "Questionnaire caractérisation MODECOM.xlsx"
-FORM_CARAC_ANCIEN = "Caractérisation des déchets MODECOM_v2.xlsx"
+FORM_CARAC = "Fiche de caractérisation MODECOM (13 catégories).xlsx"
 FORM_SITES_AGRO = "Identification et cartographie des sites — Agro-pastoral (Pôle Nord).xlsx"
 FORM_TRI_AGRO = "Caractérisation agro-pastorale (A1–A6) — MODECOM Pôle Nord.xlsx"
 FORM_PHOTOS = "Photo caractérisation.xlsx"
@@ -43,8 +42,7 @@ ROLE_PHOTOS = "photos"
 UID_ROLES = {
     "aRuKgN8hXyDTyLRbSTLdNH": ROLE_MENAGES,      # enquête ménage, version en service
     "aG2BGSMEib9xWfRzoeXcXm": ROLE_MENAGES,      # enquête socio-démographique, 1re version
-    "a6g6VnmqYqVBf33QhXUVe3": ROLE_TRI,          # caractérisation MODECOM, 1re version
-    "avQNVABnKjUArYNJj8RDxd": ROLE_TRI,          # caractérisation MODECOM, à jour
+    "aFVV4abQHn6H8p7hYPen44": ROLE_TRI,          # fiche de caractérisation, 13 catégories
     "aSnArkcnDbH4pDqq9uDFTy": ROLE_SITES_AGRO,   # identification des sites agro-pastoraux
     "aCvQFPEqY9sPUGjXFLPh6q": ROLE_TRI_AGRO,     # caractérisation agro-pastorale A1-A6
     "aabjLvJkGkwgDA3gaUzJtj": ROLE_PHOTOS,       # reportage photo par commune
@@ -483,8 +481,8 @@ DUREE_CACHE = 300  # secondes : au-dela, les soumissions sont relues sur Kobo
 SIGNES = {
     ROLE_MENAGES: {"menage_id", "nb_total", "nb_present", "consentement",
                    "tri_source", "dispose_trier"},
-    ROLE_TRI: {"masse_totale_brute", "Infrastructure_concern_e", "Nom_du_Circuit",
-               "nombre_sachets_distribues", "mode_caracterisation"},
+    ROLE_TRI: {"masse_echantillon", "masse_quart", "masse_totale_triee",
+               "total_het", "total_g100", "total_m20", "s1_1_het"},
     ROLE_SITES_AGRO: {"categories_presentes", "accessibilite", "type_activite", "site"},
     ROLE_TRI_AGRO: {"masse_a1", "masse_a3", "te_a1", "momov_a1", "categorie"},
     ROLE_PHOTOS: {"Point_and_shoot_Use_mera_to_take_a_photo",
@@ -611,18 +609,126 @@ COLS_SOCIO = {
     "observations": ["observations", "i_observations"], "gps": ["gps"],
     "date": ["today", "date", "_submission_time", "end"],
 }
-COLS_CARAC = {
-    "code_echantillon": ["code_echantillon"], "superviseur": ["superviseur"],
-    "region": ["region"], "infrastructure": ["Infrastructure_concern_e"],
-    "type_site": ["type_site"], "nom_site": ["Nom_du_site"],
-    "niveau_vie": ["niveau_vie"], "type_dechet": ["type_dechet"],
-    "methode": ["methode"], "saison": ["saison"],
-    "masse_brute": ["masse_totale_brute"], "masse_quartage": ["masse_apres_quartage"],
-    "masse_nette": ["masse_nette_totale"],
-    "date": ["date_collecte", "_submission_time"],
+# Nomenclature MODECOM du formulaire de caracterisation : 13 categories,
+# 50 sous-categories. Chaque sous-categorie est pesee en trois fractions
+# granulometriques, sauf les fines qui portent une pesee unique.
+NOMENCLATURE = {
+    "1": {"titre": "D\u00e9chets putrescibles", "sous": {
+        "s1_1": "D\u00e9chets alimentaires (restes de cuisine non consommable)",
+        "s1_2": "Produits alimentaires non consomm\u00e9s sans emballages",
+        "s1_3": "Produits alimentaires non consomm\u00e9s sous emballages",
+        "s1_4": "Autres putrescibles",
+        "s1_5": "D\u00e9chets de jardin",
+    }},
+    "2": {"titre": "Papiers", "sous": {
+        "s2_1": "Emballages papiers",
+        "s2_2": "Journaux, magazines et revues",
+        "s2_3": "Imprim\u00e9s publicitaires",
+        "s2_4": "Papiers bureautiques",
+        "s2_5": "Autres papiers",
+    }},
+    "3": {"titre": "Cartons", "sous": {
+        "s3_1": "Emballages cartons plats",
+        "s3_2": "Emballages cartons ondul\u00e9s",
+        "s3_3": "Autres cartons",
+    }},
+    "4": {"titre": "Composites", "sous": {
+        "s4_1": "Emballages de Liquide Alimentaire (ELA)",
+        "s4_2": "Autres emballages composites",
+        "s4_3": "Petits Appareils \u00c9lectrom\u00e9nagers (PAM)",
+    }},
+    "5": {"titre": "Textiles", "sous": {
+        "s5": "Textiles",
+    }},
+    "6": {"titre": "Textiles sanitaires", "sous": {
+        "s6_1": "Couches b\u00e9b\u00e9s",
+        "s6_2": "Autre fraction hygi\u00e9nique",
+    }},
+    "7": {"titre": "Plastiques", "sous": {
+        "s7_1": "Sacs poubelle",
+        "s7_2": "Autres sacs plastiques",
+        "s7_3": "Autres films plastiques d'emballage",
+        "s7_4": "Bouteilles et flacons en PET",
+        "s7_5": "Bouteilles et flacons polyol\u00e9fines",
+        "s7_6": "Autres emballages plastiques",
+        "s7_7": "Autres plastiques",
+    }},
+    "8": {"titre": "Combustibles non class\u00e9s", "sous": {
+        "s8_1": "Emballages en bois",
+        "s8_2": "Chaussures",
+        "s8_3": "Maroquinerie",
+        "s8_4": "Autres combustibles",
+    }},
+    "9": {"titre": "Verre", "sous": {
+        "s9_1": "Emballages en verre incolore",
+        "s9_2": "Emballages en verre de couleur",
+        "s9_3": "Autres verres",
+    }},
+    "10": {"titre": "M\u00e9taux", "sous": {
+        "s10_1": "Emballages m\u00e9taux ferreux",
+        "s10_2": "Emballages aluminium",
+        "s10_3": "Autres m\u00e9taux ferreux",
+        "s10_4": "Autres m\u00e9taux",
+    }},
+    "11": {"titre": "Incombustibles non class\u00e9s", "sous": {
+        "s11_1": "Emballages incombustibles",
+        "s11_2": "Autres incombustibles",
+    }},
+    "12": {"titre": "D\u00e9chets dangereux", "sous": {
+        "s12_1": "D\u00e9chets diffus sp\u00e9cifiques",
+        "s12_2": "Tubes fluorescents et lampes basses consommation",
+        "s12_3": "Piles et accumulateurs",
+        "s12_4": "D\u00e9chets d'activit\u00e9s de soins perforants",
+        "s12_5": "Huiles min\u00e9rales",
+        "s12_6": "Cartouche d'impression",
+        "s12_7": "Bouteilles de gaz",
+        "s12_8": "M\u00e9dicaments non utilis\u00e9s",
+        "s12_9": "Autres d\u00e9chets m\u00e9nagers sp\u00e9ciaux",
+    }},
+    "13": {"titre": "Fines", "sous": {
+        "s13_1": "\u00c9l\u00e9ments fins entre 8 et 20 mm",
+        "s13_2": "\u00c9l\u00e9ments fins < 8 mm",
+    }},
 }
-CHAMPS_COMMUNE_CARAC = ["Commune_Dagana", "Commune_Bokhol", "Commune_Ndioum",
-                        "Commune_OGO", "Commune_Ran_rou"]
+
+FRACTIONS = {"het": "Hétéroclites", "g100": "> 100 mm", "m20": "100 à 20 mm",
+             "poids": "Fines"}
+
+
+# Colonnes de masse du formulaire : sous-categorie et fraction.
+def _colonnes_masse():
+    cols = {}
+    for num, v in NOMENCLATURE.items():
+        for cle in v["sous"]:
+            suffixes = ("poids",) if num == "13" else ("het", "g100", "m20")
+            for f in suffixes:
+                cols[f"{cle}_{f}"] = (num, cle, f)
+    return cols
+
+
+COLONNES_MASSE = _colonnes_masse()
+
+COLS_CARAC = {
+    "date": ["date_carac", "_submission_time"],
+    "methode": ["mode_caracterisation"], "region": ["region"],
+    "infrastructure": ["infrastructure"], "commune": ["commune"],
+    "site": ["site_precis"], "code_echantillon": ["code_echantillon"],
+    "enqueteur": ["enqueteur"], "gps": ["gps"],
+    "strate": ["strate"], "nb_menages": ["nombre_menages"],
+    "sacs_distribues": ["nombre_sachets_distribues"],
+    "sacs_collectes": ["nombre_sachets_collectes"],
+    "date_distribution": ["date_distribution"],
+    "date_recuperation": ["date_recuperation"],
+    "masse_echantillon": ["masse_echantillon"], "masse_quart": ["masse_quart"],
+    "total_het": ["total_het"], "total_g100": ["total_g100"],
+    "total_m20": ["total_m20"], "total_fines": ["total_fines"],
+    "masse_triee": ["masse_totale_triee"],
+    "notes": ["notes"],
+}
+
+STRATES = {"modeste": "Modeste", "moyen": "Moyen", "aise": "Aisé",
+           "mixte": "Mixte résidentiel / commercial"}
+MODES_CARAC = {"sur_sites": "MODECOM sur site", "a_la_source": "MODECOM à la source"}
 
 
 def _renomme(df, corr):
@@ -652,22 +758,49 @@ def normalise_socio(df):
 
 
 def normalise_carac(df):
+    """Fiche de caracterisation MODECOM a 13 categories.
+
+    Ajoute une colonne de masse par categorie, `cat_1` a `cat_13`, egale a la
+    somme des sous-categories et des fractions granulometriques.
+    """
     if df is None or df.empty:
         return pd.DataFrame()
     df = df.copy()
     df.columns = [str(c).split("/")[-1] for c in df.columns]
     df = _renomme(df, COLS_CARAC)
-    presents = [c for c in CHAMPS_COMMUNE_CARAC if c in df.columns]
-    if presents:
-        df["commune"] = df[presents].bfill(axis=1).iloc[:, 0]
     if "commune" in df:
         df["commune"] = df["commune"].map(rapproche_commune)
-    for c in ("masse_brute", "masse_quartage", "masse_nette"):
+    if "strate" in df:
+        df["strate"] = df["strate"].map(lambda v: STRATES.get(str(v), v))
+    if "methode" in df:
+        df["methode"] = df["methode"].map(lambda v: MODES_CARAC.get(str(v), v))
+
+    for c in ("masse_echantillon", "masse_quart", "total_het", "total_g100",
+              "total_m20", "total_fines", "masse_triee", "nb_menages",
+              "sacs_distribues", "sacs_collectes"):
         if c in df:
             df[c] = pd.to_numeric(df[c], errors="coerce")
-    if "date" in df:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    return df
+    presentes = [c for c in COLONNES_MASSE if c in df.columns]
+    for c in presentes:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    totaux = {}
+    for num in NOMENCLATURE:
+        cols = [c for c in presentes if COLONNES_MASSE[c][0] == num]
+        if cols:
+            totaux[f"cat_{num}"] = df[cols].sum(axis=1, min_count=1)
+    if totaux:
+        df = pd.concat([df, pd.DataFrame(totaux, index=df.index)], axis=1)
+        df["masse_triee_calc"] = df[list(totaux)].sum(axis=1, min_count=1)
+    else:
+        df["masse_triee_calc"] = pd.NA
+    if "masse_triee" not in df:
+        df["masse_triee"] = df["masse_triee_calc"]
+
+    for c in ("date", "date_distribution", "date_recuperation"):
+        if c in df:
+            df[c] = pd.to_datetime(df[c], errors="coerce")
+    return _coordonnees(df)
 
 
 COLS_SITES_AGRO = {
@@ -922,36 +1055,60 @@ def controler_socio(df):
 
 
 def controler_carac(df, pesees=None):
+    """Controles de la fiche de caracterisation a 13 categories."""
     a = []
     if df is None or df.empty:
         return pd.DataFrame(a)
     Q = "Caractérisation"
-    if {"masse_brute", "masse_quartage"} <= set(df.columns):
-        _ajoute(a, "Bloquant", Q, "Masse après quartage supérieure à la brute",
-                df[df["masse_quartage"] > df["masse_brute"]], "code_echantillon",
-                lambda r: f"{r['masse_quartage']:.1f} kg contre {r['masse_brute']:.1f} kg")
-    if {"masse_nette", "masse_quartage"} <= set(df.columns):
-        _ajoute(a, "Bloquant", Q, "Masse nette supérieure au quartage",
-                df[df["masse_nette"] > df["masse_quartage"] * 1.001], "code_echantillon",
-                lambda r: f"{r['masse_nette']:.1f} kg contre {r['masse_quartage']:.1f} kg")
-    if pesees is not None and "masse_nette" in df:
-        cols = [c for c in pesees[~pesees["globale"]]["name"] if c in df.columns]
-        if cols:
-            somme = df[cols].apply(pd.to_numeric, errors="coerce").sum(axis=1)
-            ecart = (somme - df["masse_nette"]) / df["masse_nette"].replace(0, pd.NA)
-            _ajoute(a, "Bloquant", Q, "Somme des fractions hors tolérance",
-                    df[ecart.abs() > 0.05].assign(_ecart=ecart), "code_echantillon",
-                    lambda r: f"écart de {r['_ecart'] * 100:+.1f} % avec la masse nette")
-    if "masse_brute" in df:
+    if {"masse_echantillon", "masse_quart"} <= set(df.columns):
+        _ajoute(a, "Bloquant", Q, "Quart supérieur à l'échantillon",
+                df[df["masse_quart"] > df["masse_echantillon"] * 1.001],
+                "code_echantillon",
+                lambda r: f"{r['masse_quart']:.1f} kg pour un échantillon de "
+                          f"{r['masse_echantillon']:.1f} kg")
+    if {"masse_triee", "masse_quart"} <= set(df.columns):
+        t = df.assign(_e=(df["masse_triee"] - df["masse_quart"])
+                      / df["masse_quart"].replace(0, pd.NA))
+        _ajoute(a, "Bloquant", Q, "Masse triée hors tolérance",
+                t[t["_e"].abs() > 0.05], "code_echantillon",
+                lambda r: f"écart de {r['_e'] * 100:+.1f} % avec la masse du quart")
+    if {"masse_triee", "masse_triee_calc"} <= set(df.columns):
+        d = (df["masse_triee"] - df["masse_triee_calc"]).abs()
+        _ajoute(a, "Information", Q, "Total calculé différent du total transmis",
+                df[d > 0.05], "code_echantillon",
+                lambda r: f"{r['masse_triee']:.2f} kg transmis contre "
+                          f"{r['masse_triee_calc']:.2f} kg recalculés")
+    if {"sacs_distribues", "sacs_collectes"} <= set(df.columns):
+        _ajoute(a, "Bloquant", Q, "Plus de sacs collectés que distribués",
+                df[df["sacs_collectes"] > df["sacs_distribues"]], "code_echantillon",
+                lambda r: f"{r['sacs_collectes']:.0f} collectés pour "
+                          f"{r['sacs_distribues']:.0f} distribués")
+        t = df.assign(_t=df["sacs_collectes"]
+                      / df["sacs_distribues"].replace(0, pd.NA))
+        _ajoute(a, "À vérifier", Q, "Récupération des sacs faible",
+                t[t["_t"] < 0.7], "code_echantillon",
+                lambda r: f"{r['_t'] * 100:.0f} % des sacs récupérés")
+    if {"date_distribution", "date_recuperation"} <= set(df.columns):
+        _ajoute(a, "Bloquant", Q, "Récupération avant distribution",
+                df[df["date_recuperation"] < df["date_distribution"]],
+                "code_echantillon", "Les deux dates sont incohérentes")
+    if "masse_echantillon" in df:
         _ajoute(a, "À vérifier", Q, "Échantillon de faible masse",
-                df[df["masse_brute"] < 100], "code_echantillon",
-                lambda r: f"{r['masse_brute']:.1f} kg, en dessous du seuil de 100 kg")
+                df[df["masse_echantillon"] < 20], "code_echantillon",
+                lambda r: f"{r['masse_echantillon']:.1f} kg, en dessous de 20 kg")
+    if "cat_13" in df and "masse_triee" in df:
+        t = df.assign(_p=df["cat_13"] / df["masse_triee"].replace(0, pd.NA))
+        _ajoute(a, "À vérifier", Q, "Part de fines élevée",
+                t[t["_p"] > 0.3], "code_echantillon",
+                lambda r: f"les fines représentent {r['_p'] * 100:.0f} % "
+                          "de la masse triée")
     if "commune" in df:
         _ajoute(a, "Bloquant", Q, "Commune hors périmètre",
                 df[~df["commune"].isin(COMMUNES)], "code_echantillon",
                 lambda r: f"Commune non reconnue : {r['commune']}")
     if "code_echantillon" in df:
-        dup = df[df.duplicated("code_echantillon", keep=False) & df["code_echantillon"].notna()]
+        dup = df[df.duplicated("code_echantillon", keep=False)
+                 & df["code_echantillon"].notna()]
         _ajoute(a, "Bloquant", Q, "Code d'échantillon en doublon", dup,
                 "code_echantillon", "Le même code apparaît plusieurs fois")
     return pd.DataFrame(a)
@@ -1535,12 +1692,9 @@ with onglets[3]:
             st.success("Aucune anomalie détectée.")
 
         if not socio.empty and not carac.empty:
-            if "menage_id" in socio.columns and "menage_id" in carac.columns:
-                st.success("Les deux questionnaires partagent un identifiant de ménage, "
-                           "le croisement composition et profil est possible.")
-            else:
-                st.warning("Le questionnaire de caractérisation ne porte aucun identifiant "
-                           "de ménage. L'analyse restera au niveau de la commune.")
+            st.caption("La fiche de caractérisation ne porte pas d'identifiant de "
+                       "ménage : le croisement avec l'enquête ménage se fait au "
+                       "niveau de la commune et de la strate.")
 
         if not anomalies.empty:
             g, d = st.columns([2, 3])
@@ -1561,56 +1715,120 @@ with onglets[3]:
 
 # ---------------------------------------------------------------- COMPOSITION
 with onglets[4]:
-    if carac.empty or pesees is None:
-        attente("Cette vue s'appuie sur les fiches de tri.<br>"
+    if carac.empty:
+        attente("Cette vue s'appuie sur les fiches de caractérisation.<br>"
                 "Aucune n'est encore arrivée de Kobo.")
     else:
-        cats = pesees[~pesees["globale"]]
-        cols = [c for c in cats["name"] if c in carac.columns]
-        if not cols:
-            st.warning("Les colonnes de pesée ne se retrouvent pas dans les soumissions. "
-                       "Vérifier l'origine de l'export.")
+        f1, f2, f3 = st.columns([3, 2, 2])
+        dispo = sorted(carac["commune"].dropna().unique())
+        choix = f1.multiselect("Communes", dispo, default=dispo, key="comp_communes")
+        strates = sorted(carac["strate"].dropna().unique()) if "strate" in carac else []
+        ch_str = f2.multiselect("Strates", strates, default=strates,
+                                key="comp_strates") if strates else []
+        modes = sorted(carac["methode"].dropna().unique()) if "methode" in carac else []
+        ch_mod = f3.multiselect("Méthodes", modes, default=modes,
+                                key="comp_modes") if modes else []
+
+        sel = carac[carac["commune"].isin(choix)]
+        if ch_str:
+            sel = sel[sel["strate"].isin(ch_str)]
+        if ch_mod:
+            sel = sel[sel["methode"].isin(ch_mod)]
+
+        if sel.empty:
+            st.info("Aucune fiche ne correspond à cette sélection.")
         else:
-            dispo = sorted(carac["commune"].dropna().unique())
-            choix = st.multiselect("Communes", dispo, default=dispo)
-            sel = carac[carac["commune"].isin(choix)]
-            masses = sel[cols].apply(pd.to_numeric, errors="coerce")
-            total = float(masses.sum().sum())
+            cols_cat = [f"cat_{n}" for n in NOMENCLATURE if f"cat_{n}" in sel.columns]
+            par_cat = sel[cols_cat].sum(min_count=1)
+            total = float(par_cat.sum())
+
             m1, m2, m3 = st.columns(3)
-            fiche(m1, "Échantillons", f"{len(sel)}", "fiches de tri retenues", "neutre")
-            fiche(m2, "Masse brute cumulée",
-                  f"{sel['masse_brute'].sum():,.0f}".replace(",", " ") + " kg",
-                  "avant quartage")
-            fiche(m3, "Masse triée", f"{total:,.0f}".replace(",", " ") + " kg",
-                  "somme des fractions pesées")
+            fiche(m1, "Échantillons", f"{len(sel)}", "fiches retenues", "neutre")
+            if "masse_echantillon" in sel:
+                fiche(m2, "Masse d'échantillon",
+                      f"{sel['masse_echantillon'].sum():,.0f}".replace(",", " ") + " kg",
+                      "avant quartage")
+            fiche(m3, "Masse triée", f"{total:,.1f}".replace(",", " ") + " kg",
+                  "somme des 13 catégories")
             st.write("")
 
-            par_cat = (masses.sum().rename("kg").reset_index()
-                       .rename(columns={"index": "name"})
-                       .merge(cats[["name", "categorie", "granulometrie"]], on="name"))
-            agrege = (par_cat.groupby("categorie")["kg"].sum().reset_index()
-                      .sort_values("kg", ascending=False))
-            agrege["part"] = agrege["kg"] / total * 100 if total else 0
+            comp = pd.DataFrame({
+                "Catégorie": [f"{n}. {NOMENCLATURE[n]['titre']}"
+                              for n in NOMENCLATURE if f"cat_{n}" in sel.columns],
+                "Masse (kg)": par_cat.values,
+            })
+            comp["Part (%)"] = comp["Masse (kg)"] / total * 100 if total else 0
+            comp = comp.sort_values("Part (%)", ascending=False)
+
             try:
                 import plotly.express as px
-                top = agrege.head(15).sort_values("part")
-                fig = px.bar(top, x="part", y="categorie", orientation="h",
-                             labels={"part": "Part de la masse triée (%)", "categorie": ""},
-                             text=top["part"].map(lambda v: f"{v:.1f} %"))
-                fig.update_traces(marker_color=VERT, textposition="outside", cliponaxis=False)
-                fig.update_layout(height=520, margin=dict(l=0, r=40, t=10, b=0),
-                                  plot_bgcolor="rgba(0,0,0,0)")
+                ordre = comp.sort_values("Part (%)")
+                fig = px.bar(ordre, x="Part (%)", y="Catégorie", orientation="h",
+                             text=ordre["Part (%)"].map(lambda v: f"{v:.1f} %"))
+                fig.update_traces(marker_color=VERT, textposition="outside",
+                                  cliponaxis=False)
+                fig.update_layout(height=520, margin=dict(l=0, r=50, t=10, b=0),
+                                  plot_bgcolor="rgba(0,0,0,0)", yaxis_title="")
                 st.plotly_chart(fig, width="stretch")
             except Exception:
-                st.bar_chart(agrege.set_index("categorie")["part"].head(15))
-            st.dataframe(agrege.round(2).rename(columns={"categorie": "Fraction",
-                                                         "kg": "Masse (kg)",
-                                                         "part": "Part (%)"}),
-                         hide_index=True, width="stretch", height=340)
+                st.bar_chart(comp.set_index("Catégorie")["Part (%)"])
+
+            st.dataframe(comp.round(2), hide_index=True, width="stretch", height=340)
+
+            rubrique("Par fraction granulométrique")
+            frac = {}
+            for cle, lib in (("total_het", "Hétéroclites"),
+                             ("total_g100", "Plus de 100 mm"),
+                             ("total_m20", "100 à 20 mm"),
+                             ("total_fines", "Fines, moins de 20 mm")):
+                if cle in sel:
+                    frac[lib] = float(sel[cle].sum())
+            if frac:
+                tf = pd.DataFrame({"Fraction": list(frac), "Masse (kg)": list(frac.values())})
+                sf = tf["Masse (kg)"].sum()
+                tf["Part (%)"] = tf["Masse (kg)"] / sf * 100 if sf else 0
+                st.dataframe(tf.round(2), hide_index=True, width="stretch")
+            else:
+                st.caption("Les totaux par fraction ne figurent pas dans cet export.")
+
+            rubrique("Détail des sous-catégories")
+            lignes = []
+            for num, v in NOMENCLATURE.items():
+                for cle, libelle in v["sous"].items():
+                    suffixes = ("poids",) if num == "13" else ("het", "g100", "m20")
+                    cs = [f"{cle}_{f}" for f in suffixes if f"{cle}_{f}" in sel.columns]
+                    if not cs:
+                        continue
+                    kg = float(sel[cs].sum().sum())
+                    lignes.append({"Catégorie": f"{num}. {v['titre']}",
+                                   "Sous-catégorie": libelle, "Masse (kg)": round(kg, 3),
+                                   "Part (%)": round(kg / total * 100, 2) if total else 0})
+            detail = pd.DataFrame(lignes).sort_values("Masse (kg)", ascending=False)
+            st.dataframe(detail, hide_index=True, width="stretch", height=380)
+
+            if strates and len(ch_str) > 1:
+                rubrique("Composition par strate")
+                lignes = []
+                for st_nom, g in sel.groupby("strate"):
+                    t = float(g[cols_cat].sum().sum())
+                    for n in NOMENCLATURE:
+                        c = f"cat_{n}"
+                        if c in g.columns:
+                            lignes.append({
+                                "Strate": st_nom,
+                                "Catégorie": f"{n}. {NOMENCLATURE[n]['titre']}",
+                                "Part (%)": round(float(g[c].sum()) / t * 100, 2)
+                                if t else 0})
+                st.dataframe(pd.DataFrame(lignes).pivot(index="Catégorie",
+                                                        columns="Strate",
+                                                        values="Part (%)"),
+                             width="stretch")
+                st.caption("Comparaison en part de masse, les strates n'ayant pas "
+                           "le même nombre d'échantillons.")
+
             st.download_button("Télécharger la composition",
-                               agrege.to_csv(index=False).encode("utf-8"),
-                               "composition_modecom.csv", "text/csv")
-            galerie(carac, token, "Photos jointes aux fiches de tri")
+                               detail.to_csv(index=False).encode("utf-8"),
+                               "composition_modecom_13_categories.csv", "text/csv")
 
 # ---------------------------------------------------------------- AGRO-PASTORAL
 with onglets[5]:
@@ -1801,12 +2019,12 @@ with onglets[7]:
                      hide_index=True, width="stretch")
         st.dataframe(q[["groupe", "type", "name", "label"]], hide_index=True,
                      width="stretch", height=380)
-        if choix == "Caractérisation des déchets" and pesees is not None:
-            cats = pesees[~pesees["globale"]]
-            st.write(f"{cats['categorie'].nunique()} sous-catégories déclinées en "
-                     f"{cats['granulometrie'].nunique()} granulométries, "
-                     f"soit {len(cats)} pesées, plus {int(pesees['globale'].sum())} "
-                     "masses globales.")
+        if choix == "Caractérisation des déchets":
+            n_sous = sum(len(v["sous"]) for v in NOMENCLATURE.values())
+            st.write(f"{len(NOMENCLATURE)} catégories MODECOM, {n_sous} "
+                     f"sous-catégories, {len(COLONNES_MASSE)} pesées au total. "
+                     "Les fines portent une pesée unique, les autres "
+                     "sous-catégories trois fractions granulométriques.")
 
 st.markdown(
     "<div class='pied'>Suivi de la campagne de Caractérisation, Pôle Nord. "
