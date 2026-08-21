@@ -1499,6 +1499,11 @@ with onglets[1]:
                 return com, sit
 
             communes_geo, sites = charger_couches(str(p_gpkg))
+            communes_geo = communes_geo.copy()
+            communes_geo["commune"] = communes_geo["commune"].map(rapproche_commune)
+            # Le GeoPackage porte la methode d'origine : on la resynchronise.
+            communes_geo["methode"] = communes_geo["commune"].map(
+                lambda c: COMMUNES.get(c, {}).get("methode", "Non renseignée"))
             recus = socio.groupby("commune").size() if not socio.empty else pd.Series(dtype=int)
             communes_geo["recus"] = communes_geo["commune"].map(recus).fillna(0).astype(int)
             communes_geo["cible"] = communes_geo["commune"].apply(cible_commune)
@@ -1536,6 +1541,7 @@ with onglets[1]:
                 carte = folium.Map(
                     location=[(b[1] + b[3]) / 2, (b[0] + b[2]) / 2],
                     zoom_start=8, tiles=None, control_scale=True)
+                carte.fit_bounds([[b[1], b[0]], [b[3], b[2]]])
                 for nom, f in FONDS.items():
                     folium.TileLayer(f["tuiles"], name=nom, attr=f["credit"],
                                      overlay=False,
@@ -1560,6 +1566,28 @@ with onglets[1]:
                                          "recus", "_av"] if c in geo.columns])],
                         sticky=True),
                 ).add_to(carte)
+
+                reperes = folium.FeatureGroup(name="Repères communes", show=True)
+                for _, r in geo.iterrows():
+                    pt = r.geometry.representative_point()
+                    av = r["_av"]
+                    folium.CircleMarker(
+                        [pt.y, pt.x], radius=6, color="#FFFFFF", weight=2,
+                        fill_color=r["couleur"], fill_opacity=1,
+                        tooltip=f"{r['commune']} · {r['methode']} · {av}",
+                        popup=folium.Popup(
+                            f"<b>{r['commune']}</b><br>{r['methode']}"
+                            f"<br>{int(r['recus'])} fiches reçues", max_width=260),
+                    ).add_to(reperes)
+                    folium.Marker(
+                        [pt.y, pt.x],
+                        icon=folium.DivIcon(
+                            icon_size=(140, 18), icon_anchor=(-8, 10),
+                            html=f"<div style=\"font-size:11px;font-weight:600;"
+                                 f"color:#111;text-shadow:0 0 3px #fff,0 0 3px #fff,"
+                                 f"0 0 3px #fff\">{r['commune']}</div>"),
+                    ).add_to(reperes)
+                reperes.add_to(carte)
 
                 if sites is not None and len(sites):
                     grp = folium.FeatureGroup(name="Sites de tri", show=True)
@@ -1593,6 +1621,10 @@ with onglets[1]:
                 st.caption(FONDS[fond]["credit"] +
                            ". Limites communales : OpenStreetMap. "
                            "Population : ANSD, RGPH-5 2023.")
+                st.caption("Les douze communes ont bien une limite. Les communes "
+                           "urbaines couvrent 2 à 12 km² et restent invisibles à "
+                           "cette échelle : le repère coloré et le nom les situent. "
+                           "Zoomer fait apparaître leur polygone.")
             except ImportError:
                 st.warning("Les paquets `folium` et `streamlit-folium` ne sont pas "
                            "installés. Les ajouter à requirements.txt pour la carte "
