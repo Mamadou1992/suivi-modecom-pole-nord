@@ -65,10 +65,13 @@ CATEGORIES_AGRO = {
 
 CV_HYPOTHESE = 0.40
 MARGE_CIBLE = 0.10
-CIBLE_MENAGES = 62
-# Cibles particulieres : Ranerou est en regime allege
-CIBLES_PARTICULIERES = {"Ranérou": 30}
-# Ces valeurs sont des plafonds : le terrain peut remonter moins de sacs.
+# Le nombre de sacs a distribuer n'est plus fixe dans le code : il provient
+# du champ nombre_sachets_distribues de la fiche de caracterisation. Tant
+# qu'aucune fiche n'est saisie pour une commune, son objectif vaut zero.
+
+# Enquete menage : 30 menages par commune en MODECOM a la source.
+# Les communes en prelevement sur site de collecte n'en enquetent pas.
+MENAGES_PAR_COMMUNE = 30
 
 COMMUNES = {
     "Dagana":       {"infra": "CTT Dagana",  "region": "Saint-Louis", "methode": "Sur sites de collecte"},
@@ -86,17 +89,34 @@ COMMUNES = {
     "Ranérou":      {"infra": "CET Ranérou", "region": "Matam",       "methode": "MODECOM à la source, régime allégé"},
 }
 COMMUNES_SOURCE = [c for c, v in COMMUNES.items() if v["methode"].startswith("MODECOM")]
+# Communes qui enquetent des menages : toutes, sauf les deux communes
+# agro-pastorales qui suivent un protocole distinct. Dagana et Richard Toll
+# prelevent sur decharge mais enquetent bien leurs menages.
+COMMUNES_MENAGES = [c for c, v in COMMUNES.items()
+                    if "agro-pastoral" not in v["methode"]]
 COMMUNES_SITE = [c for c, v in COMMUNES.items() if not v["methode"].startswith("MODECOM")]
 
 
-def cible_commune(commune):
-    """Nombre de menages a equiper en sacs, 0 si prelevement sur site de collecte."""
-    if commune not in COMMUNES_SOURCE:
-        return 0
-    return CIBLES_PARTICULIERES.get(commune, CIBLE_MENAGES)
+def objectif_menages(commune):
+    """Menages a enqueter dans cette commune, 0 hors MODECOM a la source."""
+    return MENAGES_PAR_COMMUNE if commune in COMMUNES_MENAGES else 0
 
 
-CIBLE_TOTALE = sum(cible_commune(c) for c in COMMUNES)
+OBJECTIF_MENAGES = sum(objectif_menages(c) for c in COMMUNES)
+
+
+def sacs_par_commune(df, colonne="sacs_distribues"):
+    """Sacs declares dans les fiches de caracterisation, par commune.
+
+    Les fiches d'une meme commune sont cumulees. Une commune sans fiche
+    n'apparait pas dans le resultat.
+    """
+    vide = pd.Series(dtype="float64")
+    if df is None or getattr(df, "empty", True):
+        return vide
+    if colonne not in df.columns or "commune" not in df.columns:
+        return vide
+    return df.groupby("commune")[colonne].sum(min_count=1).dropna()
 
 # Regroupement des communes sur la methode declaree, sans famille
 # intermediaire : chaque methode du dictionnaire COMMUNES forme un groupe,
@@ -1384,14 +1404,26 @@ if all(x.empty for x in (socio, carac, sites_agro, tri_agro)):
     st.sidebar.info("Aucune soumission sur Kobo pour l'instant.")
 
 # --- indicateurs generaux
-cible_totale = CIBLE_TOTALE
+sacs_distribues = sacs_par_commune(carac, "sacs_distribues")
+sacs_collectes = sacs_par_commune(carac, "sacs_collectes")
+
+
+def cible_commune(commune):
+    """Sacs distribues dans cette commune, d'apres les fiches de caracterisation."""
+    return int(sacs_distribues.get(commune, 0) or 0)
+
+
+cible_totale = int(sacs_distribues.sum()) if len(sacs_distribues) else 0
 c1, c2, c3, c4 = st.columns(4)
-part = len(socio) / cible_totale * 100 if cible_totale else 0
+part = len(socio) / OBJECTIF_MENAGES * 100 if OBJECTIF_MENAGES else 0
+nb_com_sacs = int((sacs_distribues > 0).sum())
 fiche(c1, "Objectif de sacs à distribuer", f"{cible_totale}",
-      f"{CIBLE_MENAGES} par commune sur {len(COMMUNES_SOURCE)} communes à la source",
-      "neutre")
-fiche(c2, "Fiches ménage reçues", f"{len(socio)}", f"{part:.0f} % de l'objectif",
-      "normal" if part >= 50 else "veille")
+      (f"déclarés sur {nb_com_sacs} communes dans les fiches de caractérisation"
+       if cible_totale else "en attente des fiches de caractérisation"),
+      "neutre" if cible_totale else "veille")
+fiche(c2, "Fiches ménage reçues", f"{len(socio)} / {OBJECTIF_MENAGES}",
+      f"{part:.0f} % de l'objectif, {MENAGES_PAR_COMMUNE} par commune",
+      "normal" if part >= 100 else ("veille" if part >= 50 else "alerte"))
 fiche(c3, "Échantillons triés", f"{len(carac)}", "questionnaire de caractérisation")
 vues = set(socio["commune"].dropna()) if not socio.empty else set()
 vues |= set(carac["commune"].dropna()) if not carac.empty else set()
@@ -1410,53 +1442,74 @@ with onglets[0]:
         recu = int((socio["commune"] == commune).sum()) if not socio.empty else 0
         trie = int((carac["commune"] == commune).sum()) if not carac.empty else 0
         cible = cible_commune(commune)
+        collectes = int(sacs_collectes.get(commune, 0) or 0)
+        objectif = objectif_menages(commune)
         lignes.append({"Commune": commune, "Région": info["region"],
                        "Infrastructure": info["infra"], "Méthode": info["methode"],
-                       "Objectif sacs": cible, "Fiches reçues": recu,
-                       "Marge restante": max(cible - recu, 0),
-                       "Avancement": (recu / cible * 100) if cible else None,
+                       "Objectif ménages": objectif, "Fiches reçues": recu,
+                       "Reste à enquêter": max(objectif - recu, 0),
+                       "Avancement": (recu / objectif * 100) if objectif else None,
+                       "Sacs distribués": cible, "Sacs collectés": collectes,
+                       "Récupération": (collectes / cible * 100) if cible else None,
                        "Échantillons triés": trie})
     suivi = pd.DataFrame(lignes)
-    tot_cible = suivi["Objectif sacs"].sum()
-    tot_recu = suivi.loc[suivi["Objectif sacs"] > 0, "Fiches reçues"].sum()
+    tot_obj = suivi["Objectif ménages"].sum()
+    tot_recu = suivi["Fiches reçues"].sum()
+    tot_cible = suivi["Sacs distribués"].sum()
+    tot_coll = suivi["Sacs collectés"].sum()
 
-    a, b, c = st.columns(3)
-    pc = tot_recu / tot_cible * 100 if tot_cible else 0
-    fiche(a, "Objectif total", f"{tot_cible}", "sacs au maximum", "neutre")
-    fiche(b, "Reçu", f"{tot_recu}", f"{pc:.0f} % de l'objectif",
-          "normal" if pc >= 50 else "veille")
-    fiche(c, "Marge restante", f"{max(tot_cible - tot_recu, 0)}", "sacs possibles",
-          "veille" if tot_cible - tot_recu > 0 else "normal")
+    a, b, c, d = st.columns(4)
+    pc = tot_recu / tot_obj * 100 if tot_obj else 0
+    rec = tot_coll / tot_cible * 100 if tot_cible else 0
+    fiche(a, "Objectif ménages", f"{tot_obj}",
+          f"{MENAGES_PAR_COMMUNE} par commune sur {len(COMMUNES_MENAGES)} communes",
+          "neutre")
+    fiche(b, "Fiches reçues", f"{tot_recu}", f"{pc:.0f} % de l'objectif",
+          "normal" if pc >= 100 else ("veille" if pc >= 50 else "alerte"))
+    fiche(c, "Sacs distribués", f"{tot_cible}",
+          "déclarés dans les fiches de caractérisation" if tot_cible
+          else "en attente des fiches", "neutre")
+    fiche(d, "Sacs collectés", f"{tot_coll}",
+          f"{rec:.0f} % des sacs distribués" if tot_cible else "en attente",
+          "normal" if rec >= 80 else ("veille" if tot_cible else "neutre"))
     st.write("")
 
     try:
         import plotly.graph_objects as go
-        src = suivi[suivi["Objectif sacs"] > 0].sort_values("Avancement")
+        src = suivi[suivi["Objectif ménages"] > 0].sort_values("Avancement")
         fig = go.Figure()
-        fig.add_bar(y=src["Commune"], x=src["Objectif sacs"], orientation="h",
+        fig.add_bar(y=src["Commune"], x=src["Objectif ménages"], orientation="h",
                     marker_color="#DCDCD4", hoverinfo="skip")
         fig.add_bar(y=src["Commune"], x=src["Fiches reçues"], orientation="h",
                     marker_color=[COULEURS[m] for m in src["Méthode"]],
                     hovertemplate="%{y} : %{x} fiches<extra></extra>")
-        fig.add_vline(x=CIBLE_MENAGES, line_dash="dot", line_color="#B01B2E",
-                      annotation_text=f"cible {CIBLE_MENAGES}")
         fig.update_layout(barmode="overlay", height=420, showlegend=False,
                           margin=dict(l=0, r=0, t=10, b=0), xaxis_title="Ménages",
                           plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, width="stretch")
     except Exception:
         st.bar_chart(suivi.set_index("Commune")["Fiches reçues"])
+    if not tot_cible:
+        st.info("Aucun sac déclaré pour l'instant : le nombre de sacs distribués "
+                "est lu dans les fiches de caractérisation, qui ne sont pas encore "
+                "saisies. Les deux colonnes de sacs se rempliront à ce moment-là.")
 
-    st.dataframe(suivi, hide_index=True, width="stretch",
-                 column_config={"Avancement": st.column_config.ProgressColumn(
-                     "Avancement", format="%.0f %%", min_value=0, max_value=100)})
+    st.dataframe(
+        suivi, hide_index=True, width="stretch",
+        column_config={
+            "Avancement": st.column_config.ProgressColumn(
+                "Avancement", format="%.0f %%", min_value=0, max_value=100,
+                help="Fiches ménage reçues rapportées aux sacs distribués"),
+            "Récupération": st.column_config.NumberColumn(
+                "Récupération", format="%.0f %%",
+                help="Sacs collectés rapportés aux sacs distribués")})
     st.caption(
-        f"{CIBLE_MENAGES} sacs par commune est un maximum, pas un quota à atteindre. "
-        "Un effectif de 60 ou moins reste conforme : il traduit la réalité du terrain "
-        "et non un incident de collecte. Ranérou est en régime allégé, maximum "
-        f"{CIBLES_PARTICULIERES['Ranérou']}. Dagana et Bokhol sont en prélèvement sur "
-        "site de collecte, la décharge, sans sacs. Ndioum combine les deux "
-        "dispositifs.")
+        f"L'objectif d'enquête est de {MENAGES_PAR_COMMUNE} ménages par commune, "
+        f"sur {len(COMMUNES_MENAGES)} communes, soit {OBJECTIF_MENAGES} ménages. "
+        "Dagana et Richard Toll enquêtent leurs ménages même si le prélèvement se "
+        "fait sur décharge. Ogo et Bokidiawé relèvent du protocole agro-pastoral "
+        "et n'entrent pas dans ce décompte. Le nombre de sacs est lu dans les "
+        "fiches de caractérisation et vaut zéro tant qu'aucune n'est saisie.")
     st.download_button("Télécharger le tableau de suivi",
                        suivi.to_csv(index=False).encode("utf-8"),
                        "suivi_avancement.csv", "text/csv")
@@ -2092,6 +2145,8 @@ st.markdown(
     "<div class='pied'>Suivi de la campagne de Caractérisation, Pôle Nord. "
     "La collecte se fait dans ODK Collect ou KoboCollect, hors connexion ; cette "
     "application lit les soumissions une fois synchronisées.<br>"
-    f"Cible de {CIBLE_MENAGES} ménages par commune sur {len(COMMUNES_SOURCE)} communes "
-    "en MODECOM à la source. Population de référence : ANSD, RGPH-5 2023.</div>",
+    f"Objectif de {MENAGES_PAR_COMMUNE} ménages par commune, soit "
+    f"{OBJECTIF_MENAGES}. Les sacs distribués sont lus dans les fiches de "
+    "caractérisation. "
+    "Population de référence : ANSD, RGPH-5 2023.</div>",
     unsafe_allow_html=True)
