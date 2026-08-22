@@ -89,11 +89,11 @@ COMMUNES = {
     "Ranérou":      {"infra": "CET Ranérou", "region": "Matam",       "methode": "MODECOM à la source, régime allégé"},
 }
 COMMUNES_SOURCE = [c for c, v in COMMUNES.items() if v["methode"].startswith("MODECOM")]
-# Communes qui enquetent des menages : toutes, sauf les deux communes
-# agro-pastorales qui suivent un protocole distinct. Dagana et Richard Toll
-# prelevent sur decharge mais enquetent bien leurs menages.
-COMMUNES_MENAGES = [c for c, v in COMMUNES.items()
-                    if "agro-pastoral" not in v["methode"]]
+# Communes retenues pour l'enquete menage. Liste arretee par le projet, elle
+# ne se deduit pas de la methode de caracterisation.
+COMMUNES_MENAGES = ["Richard Toll", "Bokhol", "Fanaye", "Podor", "Golléré",
+                    "Matam", "Ourossogui"]
+assert set(COMMUNES_MENAGES) <= set(COMMUNES)
 COMMUNES_SITE = [c for c, v in COMMUNES.items() if not v["methode"].startswith("MODECOM")]
 
 
@@ -1464,7 +1464,11 @@ with onglets[0]:
     fiche(a, "Objectif ménages", f"{tot_obj}",
           f"{MENAGES_PAR_COMMUNE} par commune sur {len(COMMUNES_MENAGES)} communes",
           "neutre")
-    fiche(b, "Fiches reçues", f"{tot_recu}", f"{pc:.0f} % de l'objectif",
+    dans_objectif = int(suivi.loc[suivi["Objectif ménages"] > 0,
+                                  "Fiches reçues"].sum())
+    pc = dans_objectif / tot_obj * 100 if tot_obj else 0
+    fiche(b, "Fiches reçues", f"{dans_objectif} / {tot_obj}",
+          f"{pc:.0f} % de l'objectif, {tot_recu} fiches au total",
           "normal" if pc >= 100 else ("veille" if pc >= 50 else "alerte"))
     fiche(c, "Sacs distribués", f"{tot_cible}",
           "déclarés dans les fiches de caractérisation" if tot_cible
@@ -1499,17 +1503,28 @@ with onglets[0]:
         column_config={
             "Avancement": st.column_config.ProgressColumn(
                 "Avancement", format="%.0f %%", min_value=0, max_value=100,
-                help="Fiches ménage reçues rapportées aux sacs distribués"),
+                help="Fiches ménage reçues rapportées à l'objectif d'enquête"),
             "Récupération": st.column_config.NumberColumn(
                 "Récupération", format="%.0f %%",
                 help="Sacs collectés rapportés aux sacs distribués")})
+    hors = [c for c in COMMUNES if c not in COMMUNES_MENAGES]
     st.caption(
-        f"L'objectif d'enquête est de {MENAGES_PAR_COMMUNE} ménages par commune, "
-        f"sur {len(COMMUNES_MENAGES)} communes, soit {OBJECTIF_MENAGES} ménages. "
-        "Dagana et Richard Toll enquêtent leurs ménages même si le prélèvement se "
-        "fait sur décharge. Ogo et Bokidiawé relèvent du protocole agro-pastoral "
-        "et n'entrent pas dans ce décompte. Le nombre de sacs est lu dans les "
-        "fiches de caractérisation et vaut zéro tant qu'aucune n'est saisie.")
+        f"L'enquête ménage porte sur {len(COMMUNES_MENAGES)} communes à "
+        f"{MENAGES_PAR_COMMUNE} ménages, soit {OBJECTIF_MENAGES} au total : "
+        + ", ".join(COMMUNES_MENAGES) + ". Les autres communes, "
+        + ", ".join(hors) + ", n'ont pas d'objectif d'enquête. Le nombre de sacs "
+        "est lu dans les fiches de caractérisation et vaut zéro tant qu'aucune "
+        "n'est saisie.")
+    hors_objectif = suivi[(suivi["Objectif ménages"] == 0)
+                          & (suivi["Fiches reçues"] > 0)]
+    if len(hors_objectif):
+        st.caption(
+            "Enquêtes complémentaires, menées hors de l'objectif chiffré : "
+            + ", ".join(f"{r['Commune']}, {r['Fiches reçues']} fiches"
+                        for _, r in hors_objectif.iterrows())
+            + f". Elles portent le total à {int(suivi['Fiches reçues'].sum())} "
+            "fiches et restent exploitables dans l'analyse thématique.")
+
     st.download_button("Télécharger le tableau de suivi",
                        suivi.to_csv(index=False).encode("utf-8"),
                        "suivi_avancement.csv", "text/csv")
