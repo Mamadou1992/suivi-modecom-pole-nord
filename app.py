@@ -108,16 +108,15 @@ OBJECTIF_MENAGES = sum(objectif_menages(c) for c in COMMUNES)
 def sacs_par_commune(df, colonne="sacs_distribues"):
     """Sacs declares dans les fiches de caracterisation, par commune.
 
-    On retient le maximum declare, non la somme. Plusieurs fiches d'une meme
-    commune reprennent souvent le meme lot de sacs : les additionner comptait
-    les memes sacs plusieurs fois et faisait depasser les collectes.
+    Les fiches d'une meme commune sont cumulees. Une commune sans fiche
+    n'apparait pas dans le resultat.
     """
     vide = pd.Series(dtype="float64")
     if df is None or getattr(df, "empty", True):
         return vide
     if colonne not in df.columns or "commune" not in df.columns:
         return vide
-    return df.groupby("commune")[colonne].max().dropna()
+    return df.groupby("commune")[colonne].sum(min_count=1).dropna()
 
 # Regroupement des communes sur la methode declaree, sans famille
 # intermediaire : chaque methode du dictionnaire COMMUNES forme un groupe,
@@ -1408,7 +1407,6 @@ if all(x.empty for x in (socio, carac, sites_agro, tri_agro)):
 
 # --- indicateurs generaux
 sacs_distribues = sacs_par_commune(carac, "sacs_distribues")
-sacs_collectes = sacs_par_commune(carac, "sacs_collectes")
 
 
 def cible_commune(commune):
@@ -1453,24 +1451,20 @@ with onglets[0]:
         recu = int(recus_commune.get(commune, 0))
         trie = int((carac["commune"] == commune).sum()) if not carac.empty else 0
         cible = cible_commune(commune)
-        collectes = int(sacs_collectes.get(commune, 0) or 0)
         objectif = objectif_menages(commune)
         lignes.append({"Commune": commune, "Région": info["region"],
                        "Infrastructure": info["infra"], "Méthode": info["methode"],
                        "Objectif ménages": objectif, "Fiches reçues": recu,
                        "Reste à enquêter": max(objectif - recu, 0),
                        "Avancement": (recu / objectif * 100) if objectif else None,
-                       "Sacs distribués": cible, "Sacs collectés": collectes,
-                       "Récupération": (collectes / cible * 100) if cible else None,
+                       "Sacs distribués": cible,
                        "Échantillons triés": trie})
     suivi = pd.DataFrame(lignes)
     tot_obj = suivi["Objectif ménages"].sum()
     tot_cible = suivi["Sacs distribués"].sum()
-    tot_coll = suivi["Sacs collectés"].sum()
 
-    a, b, c, d = st.columns(4)
+    a, b, c = st.columns(3)
     pc = recus_objectif / tot_obj * 100 if tot_obj else 0
-    rec = tot_coll / tot_cible * 100 if tot_cible else 0
     fiche(a, "Objectif ménages", f"{tot_obj}",
           f"{MENAGES_PAR_COMMUNE} par commune sur {len(COMMUNES_MENAGES)} communes",
           "neutre")
@@ -1480,10 +1474,6 @@ with onglets[0]:
     fiche(c, "Sacs distribués", f"{tot_cible}",
           "déclarés dans les fiches de caractérisation" if tot_cible
           else "en attente des fiches", "neutre")
-    fiche(d, "Sacs collectés", f"{tot_coll}",
-          f"{rec:.0f} % des sacs distribués" if tot_cible else "en attente",
-          "alerte" if rec > 100 else
-          ("normal" if rec >= 80 else ("veille" if tot_cible else "neutre")))
     st.write("")
 
     try:
@@ -1508,9 +1498,9 @@ with onglets[0]:
             "Avancement": st.column_config.ProgressColumn(
                 "Avancement", format="%.0f %%", min_value=0, max_value=100,
                 help="Fiches ménage reçues rapportées à l'objectif d'enquête"),
-            "Récupération": st.column_config.NumberColumn(
-                "Récupération", format="%.0f %%",
-                help="Sacs collectés rapportés aux sacs distribués")})
+            "Sacs distribués": st.column_config.NumberColumn(
+                "Sacs distribués",
+                help="Lu dans les fiches de caractérisation")})
 
     st.download_button("Télécharger le tableau de suivi",
                        suivi.to_csv(index=False).encode("utf-8"),
