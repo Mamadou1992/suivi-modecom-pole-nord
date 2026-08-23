@@ -1442,8 +1442,8 @@ fiche(c4, "Communes couvertes", f"{nb_com} / {len(COMMUNES)}",
       "au moins une fiche ménage ou de tri", "normal" if nb_com else "neutre")
 st.write("")
 
-onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Composition",
-                   "Agro-pastoral", "Photos", "Questionnaires"])
+onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
+                   "Composition", "Agro-pastoral", "Photos", "Questionnaires"])
 
 # ---------------------------------------------------------------- AVANCEMENT
 with onglets[0]:
@@ -1774,8 +1774,71 @@ with onglets[2]:
             galerie(socio, token, "Photos jointes aux fiches ménage")
 
 
-# ---------------------------------------------------------------- COMPOSITION
+# ---------------------------------------------------------------- QUALITE
 with onglets[3]:
+    if socio.empty and carac.empty:
+        attente("Aucune soumission reçue de Kobo pour l'instant.<br>"
+                "Les contrôles s'activeront dès les premières fiches.")
+    else:
+        a1 = controler_socio(socio)
+        a2 = controler_carac(carac)
+        anomalies = (pd.concat([a1, a2], ignore_index=True)
+                     if len(a1) or len(a2) else pd.DataFrame())
+
+        def nb(g):
+            return int((anomalies["gravité"] == g).sum()) if not anomalies.empty else 0
+
+        q1, q2, q3, q4 = st.columns(4)
+        fiche(q1, "Soumissions contrôlées", f"{len(socio) + len(carac)}",
+              "fiches ménage et fiches de caractérisation", "neutre")
+        fiche(q2, "Bloquantes", f"{nb('Bloquant')}", "à corriger avant analyse",
+              "alerte" if nb("Bloquant") else "normal")
+        fiche(q3, "À vérifier", f"{nb('À vérifier')}", "à confirmer sur le terrain",
+              "veille" if nb("À vérifier") else "normal")
+        fiche(q4, "Informations", f"{nb('Information')}", "sans action requise",
+              "neutre")
+        st.write("")
+
+        if nb("Bloquant"):
+            st.error(f"{nb('Bloquant')} anomalies bloquantes à corriger avant "
+                     "toute exploitation des données.")
+        elif not anomalies.empty:
+            st.warning("Aucune anomalie bloquante. Des points restent à confirmer "
+                       "sur le terrain.")
+        else:
+            st.success("Aucune anomalie détectée.")
+
+        if not socio.empty and not carac.empty:
+            st.caption("La fiche de caractérisation ne porte pas d'identifiant de "
+                       "ménage : le croisement avec l'enquête ménage se fait au "
+                       "niveau de la commune et de la strate, pas du ménage.")
+
+        if not anomalies.empty:
+            g, d = st.columns([2, 3])
+            with g:
+                rubrique("Par contrôle")
+                st.dataframe(anomalies.groupby(["gravité", "contrôle"]).size()
+                             .reset_index(name="Nombre")
+                             .sort_values("Nombre", ascending=False),
+                             hide_index=True, width="stretch")
+            with d:
+                rubrique("Par commune")
+                st.dataframe(anomalies.groupby(["commune", "gravité"]).size()
+                             .unstack(fill_value=0), width="stretch")
+            rubrique("Détail")
+            st.dataframe(anomalies, hide_index=True, width="stretch", height=380)
+            st.download_button("Télécharger les anomalies",
+                               anomalies.to_csv(index=False).encode("utf-8"),
+                               "anomalies_modecom.csv", "text/csv")
+            st.caption(
+                "Bloquant : la donnée est fausse ou impossible, elle doit être "
+                "corrigée dans Kobo avant analyse. À vérifier : la valeur est "
+                "plausible mais inhabituelle, elle demande une confirmation du "
+                "terrain. Information : sans action requise, signalé pour mémoire.")
+
+
+# ---------------------------------------------------------------- COMPOSITION
+with onglets[4]:
     if carac.empty:
         attente("Cette vue s'appuie sur les fiches de caractérisation.<br>"
                 "Aucune n'est encore arrivée de Kobo.")
@@ -1892,7 +1955,7 @@ with onglets[3]:
                                "composition_modecom_13_categories.csv", "text/csv")
 
 # ---------------------------------------------------------------- AGRO-PASTORAL
-with onglets[4]:
+with onglets[5]:
     if sites_agro.empty and tri_agro.empty:
         attente("Aucun site agro-pastoral ni tri A1 à A6 reçu de Kobo.<br>"
                 "Ces deux formulaires couvrent Ogo et Bokidiawé.")
@@ -1996,7 +2059,7 @@ with onglets[4]:
 
 
 # ---------------------------------------------------------------- QUESTIONNAIRES
-with onglets[5]:
+with onglets[6]:
     rubrique("Photos de terrain")
     if images.empty:
         st.info("Aucune photo reçue. Les images apparaissent ici dès la première "
@@ -2045,7 +2108,7 @@ with onglets[5]:
 
 
 # ------------------------------------------------------------- QUESTIONNAIRES
-with onglets[6]:
+with onglets[7]:
     if all(f is None for f in (f_socio, f_carac, f_sites_agro, f_tri_agro)):
         attente("Les deux questionnaires XLSForm ne sont pas dans le dépôt.")
     else:
