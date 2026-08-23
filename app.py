@@ -1104,9 +1104,11 @@ def controler_socio(df):
         _ajoute(a, "Bloquant", Q, "Commune hors périmètre",
                 df[~df["commune"].isin(COMMUNES)], "menage_id",
                 lambda r: f"Commune non reconnue : {r['commune']}")
-        _ajoute(a, "À vérifier", Q, "Commune sans dépôt de sacs",
-                df[df["commune"].isin(COMMUNES_SITE)], "menage_id",
-                lambda r: f"{r['commune']} est en prélèvement sur site de collecte")
+        _ajoute(a, "Information", Q, "Commune hors objectif d'enquête",
+                df[df["commune"].isin(COMMUNES)
+                   & ~df["commune"].isin(COMMUNES_MENAGES)], "menage_id",
+                lambda r: f"{r['commune']} n'a pas d'objectif chiffré, "
+                          "enquête complémentaire")
     return pd.DataFrame(a)
 
 
@@ -1414,15 +1416,25 @@ def cible_commune(commune):
 
 
 cible_totale = int(sacs_distribues.sum()) if len(sacs_distribues) else 0
+
+# Fiches menage par commune : seules les communes a objectif entrent dans le
+# taux d'avancement. Les fiches dont la commune n'est pas reconnue sont
+# comptees a part, sinon elles gonflent le total sans apparaitre nulle part.
+recus_commune = (socio.groupby("commune").size() if not socio.empty
+                 else pd.Series(dtype=int))
+recus_objectif = int(sum(int(recus_commune.get(c, 0)) for c in COMMUNES_MENAGES))
+recus_connus = int(sum(int(recus_commune.get(c, 0)) for c in COMMUNES))
+recus_inconnus = len(socio) - recus_connus
+
 c1, c2, c3, c4 = st.columns(4)
-part = len(socio) / OBJECTIF_MENAGES * 100 if OBJECTIF_MENAGES else 0
+part = recus_objectif / OBJECTIF_MENAGES * 100 if OBJECTIF_MENAGES else 0
 nb_com_sacs = int((sacs_distribues > 0).sum())
 fiche(c1, "Objectif de sacs à distribuer", f"{cible_totale}",
       (f"déclarés sur {nb_com_sacs} communes dans les fiches de caractérisation"
        if cible_totale else "en attente des fiches de caractérisation"),
       "neutre" if cible_totale else "veille")
-fiche(c2, "Fiches ménage reçues", f"{len(socio)} / {OBJECTIF_MENAGES}",
-      f"{part:.0f} % de l'objectif, {MENAGES_PAR_COMMUNE} par commune",
+fiche(c2, "Fiches ménage reçues", f"{recus_objectif} / {OBJECTIF_MENAGES}",
+      f"{part:.0f} % de l'objectif, {len(socio)} fiches reçues au total",
       "normal" if part >= 100 else ("veille" if part >= 50 else "alerte"))
 fiche(c3, "Échantillons triés", f"{len(carac)}", "questionnaire de caractérisation")
 vues = set(socio["commune"].dropna()) if not socio.empty else set()
@@ -1430,6 +1442,11 @@ vues |= set(carac["commune"].dropna()) if not carac.empty else set()
 nb_com = len(vues & set(COMMUNES))
 fiche(c4, "Communes couvertes", f"{nb_com} / {len(COMMUNES)}",
       "au moins une fiche ménage ou de tri", "normal" if nb_com else "neutre")
+if recus_inconnus:
+    st.warning(
+        f"{recus_inconnus} fiches ménage portent une commune non reconnue et "
+        "n'apparaissent dans aucun décompte par commune. Le détail figure dans "
+        "l'onglet Qualité, contrôle « Commune hors périmètre ».")
 st.write("")
 
 onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
@@ -1439,7 +1456,7 @@ onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
 with onglets[0]:
     lignes = []
     for commune, info in COMMUNES.items():
-        recu = int((socio["commune"] == commune).sum()) if not socio.empty else 0
+        recu = int(recus_commune.get(commune, 0))
         trie = int((carac["commune"] == commune).sum()) if not carac.empty else 0
         cible = cible_commune(commune)
         collectes = int(sacs_collectes.get(commune, 0) or 0)
@@ -1454,28 +1471,31 @@ with onglets[0]:
                        "Échantillons triés": trie})
     suivi = pd.DataFrame(lignes)
     tot_obj = suivi["Objectif ménages"].sum()
-    tot_recu = suivi["Fiches reçues"].sum()
     tot_cible = suivi["Sacs distribués"].sum()
     tot_coll = suivi["Sacs collectés"].sum()
 
     a, b, c, d = st.columns(4)
-    pc = tot_recu / tot_obj * 100 if tot_obj else 0
+    pc = recus_objectif / tot_obj * 100 if tot_obj else 0
     rec = tot_coll / tot_cible * 100 if tot_cible else 0
     fiche(a, "Objectif ménages", f"{tot_obj}",
           f"{MENAGES_PAR_COMMUNE} par commune sur {len(COMMUNES_MENAGES)} communes",
           "neutre")
-    dans_objectif = int(suivi.loc[suivi["Objectif ménages"] > 0,
-                                  "Fiches reçues"].sum())
-    pc = dans_objectif / tot_obj * 100 if tot_obj else 0
-    fiche(b, "Fiches reçues", f"{dans_objectif} / {tot_obj}",
-          f"{pc:.0f} % de l'objectif, {tot_recu} fiches au total",
+    fiche(b, "Fiches reçues", f"{recus_objectif} / {tot_obj}",
+          f"{pc:.0f} % de l'objectif, {len(socio)} fiches au total",
           "normal" if pc >= 100 else ("veille" if pc >= 50 else "alerte"))
     fiche(c, "Sacs distribués", f"{tot_cible}",
           "déclarés dans les fiches de caractérisation" if tot_cible
           else "en attente des fiches", "neutre")
     fiche(d, "Sacs collectés", f"{tot_coll}",
           f"{rec:.0f} % des sacs distribués" if tot_cible else "en attente",
-          "normal" if rec >= 80 else ("veille" if tot_cible else "neutre"))
+          "alerte" if rec > 100 else
+          ("normal" if rec >= 80 else ("veille" if tot_cible else "neutre")))
+    if rec > 100:
+        st.error(
+            f"{tot_coll} sacs collectés pour {tot_cible} distribués. Une fiche de "
+            "caractérisation déclare plus de sacs récupérés que remis, ou deux "
+            "fiches d'une même commune comptent les mêmes sacs. Le détail est "
+            "dans l'onglet Qualité.")
     st.write("")
 
     try:
@@ -1522,8 +1542,8 @@ with onglets[0]:
             "Enquêtes complémentaires, menées hors de l'objectif chiffré : "
             + ", ".join(f"{r['Commune']}, {r['Fiches reçues']} fiches"
                         for _, r in hors_objectif.iterrows())
-            + f". Elles portent le total à {int(suivi['Fiches reçues'].sum())} "
-            "fiches et restent exploitables dans l'analyse thématique.")
+            + f". Elles portent le total à {len(socio)} fiches et restent "
+            "exploitables dans l'analyse thématique.")
 
     st.download_button("Télécharger le tableau de suivi",
                        suivi.to_csv(index=False).encode("utf-8"),
