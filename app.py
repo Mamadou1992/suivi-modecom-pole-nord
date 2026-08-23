@@ -1780,6 +1780,19 @@ with onglets[3]:
         attente("Aucune soumission reçue de Kobo pour l'instant.<br>"
                 "Les contrôles s'activeront dès les premières fiches.")
     else:
+        r1, r2 = st.columns([1, 4])
+        if r1.button("Relire Kobo", width="stretch", key="maj_qualite",
+                     help="Recharge les soumissions pour vérifier une correction"):
+            recuperer_kobo.clear()
+            st.rerun()
+        if derniere is not None:
+            ecoule = int((pd.Timestamp.now() - derniere).total_seconds())
+            r2.caption(
+                f"Données lues à {derniere:%H:%M:%S}"
+                + (f", il y a {ecoule // 60} min. " if ecoule >= 60 else ", à l'instant. ")
+                + "Après une correction dans Kobo, relire pour voir l'anomalie "
+                  "disparaître.")
+
         a1 = controler_socio(socio)
         a2 = controler_carac(carac)
         anomalies = (pd.concat([a1, a2], ignore_index=True)
