@@ -1431,7 +1431,8 @@ fiche(c1, "Objectif de sacs à distribuer", f"{cible_totale}",
        if cible_totale else "en attente des fiches de caractérisation"),
       "neutre" if cible_totale else "veille")
 fiche(c2, "Fiches ménage reçues", f"{recus_objectif} / {OBJECTIF_MENAGES}",
-      f"{part:.0f} % de l'objectif, {len(socio)} fiches reçues au total",
+      f"{part:.0f} % de l'objectif, {MENAGES_PAR_COMMUNE} ménages par commune "
+      f"sur {len(COMMUNES_MENAGES)} communes",
       "normal" if part >= 100 else ("veille" if part >= 50 else "alerte"))
 fiche(c3, "Échantillons triés", f"{len(carac)}", "questionnaire de caractérisation")
 vues = set(socio["commune"].dropna()) if not socio.empty else set()
@@ -1469,7 +1470,7 @@ with onglets[0]:
           f"{MENAGES_PAR_COMMUNE} par commune sur {len(COMMUNES_MENAGES)} communes",
           "neutre")
     fiche(b, "Fiches reçues", f"{recus_objectif} / {tot_obj}",
-          f"{pc:.0f} % de l'objectif, {len(socio)} fiches au total",
+          f"{pc:.0f} % de l'objectif d'enquête",
           "normal" if pc >= 100 else ("veille" if pc >= 50 else "alerte"))
     fiche(c, "Sacs distribués", f"{tot_cible}",
           "déclarés dans les fiches de caractérisation" if tot_cible
