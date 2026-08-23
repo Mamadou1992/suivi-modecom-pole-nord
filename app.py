@@ -108,15 +108,16 @@ OBJECTIF_MENAGES = sum(objectif_menages(c) for c in COMMUNES)
 def sacs_par_commune(df, colonne="sacs_distribues"):
     """Sacs declares dans les fiches de caracterisation, par commune.
 
-    Les fiches d'une meme commune sont cumulees. Une commune sans fiche
-    n'apparait pas dans le resultat.
+    On retient le maximum declare, non la somme. Plusieurs fiches d'une meme
+    commune reprennent souvent le meme lot de sacs : les additionner comptait
+    les memes sacs plusieurs fois et faisait depasser les collectes.
     """
     vide = pd.Series(dtype="float64")
     if df is None or getattr(df, "empty", True):
         return vide
     if colonne not in df.columns or "commune" not in df.columns:
         return vide
-    return df.groupby("commune")[colonne].sum(min_count=1).dropna()
+    return df.groupby("commune")[colonne].max().dropna()
 
 # Regroupement des communes sur la methode declaree, sans famille
 # intermediaire : chaque methode du dictionnaire COMMUNES forme un groupe,
@@ -1423,8 +1424,6 @@ cible_totale = int(sacs_distribues.sum()) if len(sacs_distribues) else 0
 recus_commune = (socio.groupby("commune").size() if not socio.empty
                  else pd.Series(dtype=int))
 recus_objectif = int(sum(int(recus_commune.get(c, 0)) for c in COMMUNES_MENAGES))
-recus_connus = int(sum(int(recus_commune.get(c, 0)) for c in COMMUNES))
-recus_inconnus = len(socio) - recus_connus
 
 c1, c2, c3, c4 = st.columns(4)
 part = recus_objectif / OBJECTIF_MENAGES * 100 if OBJECTIF_MENAGES else 0
@@ -1442,11 +1441,6 @@ vues |= set(carac["commune"].dropna()) if not carac.empty else set()
 nb_com = len(vues & set(COMMUNES))
 fiche(c4, "Communes couvertes", f"{nb_com} / {len(COMMUNES)}",
       "au moins une fiche ménage ou de tri", "normal" if nb_com else "neutre")
-if recus_inconnus:
-    st.warning(
-        f"{recus_inconnus} fiches ménage portent une commune non reconnue et "
-        "n'apparaissent dans aucun décompte par commune. Le détail figure dans "
-        "l'onglet Qualité, contrôle « Commune hors périmètre ».")
 st.write("")
 
 onglets = st.tabs(["Avancement", "Carte", "Analyse thématique", "Qualité",
@@ -1490,12 +1484,6 @@ with onglets[0]:
           f"{rec:.0f} % des sacs distribués" if tot_cible else "en attente",
           "alerte" if rec > 100 else
           ("normal" if rec >= 80 else ("veille" if tot_cible else "neutre")))
-    if rec > 100:
-        st.error(
-            f"{tot_coll} sacs collectés pour {tot_cible} distribués. Une fiche de "
-            "caractérisation déclare plus de sacs récupérés que remis, ou deux "
-            "fiches d'une même commune comptent les mêmes sacs. Le détail est "
-            "dans l'onglet Qualité.")
     st.write("")
 
     try:
@@ -1513,10 +1501,6 @@ with onglets[0]:
         st.plotly_chart(fig, width="stretch")
     except Exception:
         st.bar_chart(suivi.set_index("Commune")["Fiches reçues"])
-    if not tot_cible:
-        st.info("Aucun sac déclaré pour l'instant : le nombre de sacs distribués "
-                "est lu dans les fiches de caractérisation, qui ne sont pas encore "
-                "saisies. Les deux colonnes de sacs se rempliront à ce moment-là.")
 
     st.dataframe(
         suivi, hide_index=True, width="stretch",
@@ -1527,23 +1511,6 @@ with onglets[0]:
             "Récupération": st.column_config.NumberColumn(
                 "Récupération", format="%.0f %%",
                 help="Sacs collectés rapportés aux sacs distribués")})
-    hors = [c for c in COMMUNES if c not in COMMUNES_MENAGES]
-    st.caption(
-        f"L'enquête ménage porte sur {len(COMMUNES_MENAGES)} communes à "
-        f"{MENAGES_PAR_COMMUNE} ménages, soit {OBJECTIF_MENAGES} au total : "
-        + ", ".join(COMMUNES_MENAGES) + ". Les autres communes, "
-        + ", ".join(hors) + ", n'ont pas d'objectif d'enquête. Le nombre de sacs "
-        "est lu dans les fiches de caractérisation et vaut zéro tant qu'aucune "
-        "n'est saisie.")
-    hors_objectif = suivi[(suivi["Objectif ménages"] == 0)
-                          & (suivi["Fiches reçues"] > 0)]
-    if len(hors_objectif):
-        st.caption(
-            "Enquêtes complémentaires, menées hors de l'objectif chiffré : "
-            + ", ".join(f"{r['Commune']}, {r['Fiches reçues']} fiches"
-                        for _, r in hors_objectif.iterrows())
-            + f". Elles portent le total à {len(socio)} fiches et restent "
-            "exploitables dans l'analyse thématique.")
 
     st.download_button("Télécharger le tableau de suivi",
                        suivi.to_csv(index=False).encode("utf-8"),
@@ -1709,10 +1676,6 @@ with onglets[1]:
                 st.caption(FONDS[fond]["credit"] +
                            ". Limites communales : OpenStreetMap. "
                            "Population : ANSD, RGPH-5 2023.")
-                st.caption("Les douze communes ont bien une limite. Les communes "
-                           "urbaines couvrent 2 à 12 km² et restent invisibles à "
-                           "cette échelle : le repère coloré et le nom les situent. "
-                           "Zoomer fait apparaître leur polygone.")
             except ImportError:
                 st.warning("Les paquets `folium` et `streamlit-folium` ne sont pas "
                            "installés. Les ajouter à requirements.txt pour la carte "
@@ -2137,9 +2100,6 @@ with onglets[6]:
             st.caption(f"{n} photos affichées, page {int(page)} sur {pages}, "
                        "les plus récentes d'abord. Les images restent hébergées "
                        "sur Kobo, rien n'est copié ici.")
-    st.caption("Le formulaire *Photo caractérisation* ne relève pas de coordonnées "
-               "GPS : ses images sont rattachées à une commune, pas à un point de "
-               "la carte.")
 
 
 # ------------------------------------------------------------- QUESTIONNAIRES
