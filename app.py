@@ -1856,20 +1856,30 @@ with onglets[4]:
         attente("Cette vue s'appuie sur les fiches de caractérisation.<br>"
                 "Aucune n'est encore arrivée de Kobo.")
     else:
+        # Une fiche sans strate ou sans methode renseignee doit rester visible :
+        # on remplace la valeur vide par une modalite explicite plutot que de
+        # la laisser tomber hors des filtres.
+        base = carac.copy()
+        for col, vide in (("commune", "Commune non renseignée"),
+                          ("strate", "Strate non renseignée"),
+                          ("methode", "Méthode non renseignée")):
+            if col in base.columns:
+                base[col] = base[col].fillna(vide).replace("", vide)
+
         f1, f2, f3 = st.columns([3, 2, 2])
-        dispo = sorted(carac["commune"].dropna().unique())
+        dispo = sorted(base["commune"].unique()) if "commune" in base else []
         choix = f1.multiselect("Communes", dispo, default=dispo, key="comp_communes")
-        strates = sorted(carac["strate"].dropna().unique()) if "strate" in carac else []
+        strates = sorted(base["strate"].unique()) if "strate" in base else []
         ch_str = f2.multiselect("Strates", strates, default=strates,
                                 key="comp_strates") if strates else []
-        modes = sorted(carac["methode"].dropna().unique()) if "methode" in carac else []
+        modes = sorted(base["methode"].unique()) if "methode" in base else []
         ch_mod = f3.multiselect("Méthodes", modes, default=modes,
                                 key="comp_modes") if modes else []
 
-        sel = carac[carac["commune"].isin(choix)]
-        if ch_str:
+        sel = base[base["commune"].isin(choix)] if dispo else base
+        if strates:
             sel = sel[sel["strate"].isin(ch_str)]
-        if ch_mod:
+        if modes:
             sel = sel[sel["methode"].isin(ch_mod)]
 
         if sel.empty:
@@ -1880,7 +1890,8 @@ with onglets[4]:
             total = float(par_cat.sum())
 
             m1, m2, m3 = st.columns(3)
-            fiche(m1, "Échantillons", f"{len(sel)}", "fiches retenues", "neutre")
+            fiche(m1, "Échantillons", f"{len(sel)} / {len(carac)}",
+                  "fiches retenues par les filtres", "neutre")
             if "masse_echantillon" in sel:
                 fiche(m2, "Masse d'échantillon",
                       f"{sel['masse_echantillon'].sum():,.0f}".replace(",", " ") + " kg",
